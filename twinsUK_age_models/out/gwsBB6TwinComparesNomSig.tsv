@@ -1,0 +1,11 @@
+tRNAname	model	res	p_value	rank
+tRNA-Ile-AAT-4-1	MZ1_Blood & Batch_norm_dropMissing	570	0.003618240123836184	10
+tRNA-Ser-AGA-2-6	MZ1_Blood & Batch_norm_dropMissing	570	0.0037817890828386064	11
+tRNA-iMet-CAT-1-4	MZ2_Blood & Batch_norm_dropMissing	573	8.177426949967947e-4	4
+tRNA-Ile-AAT-4-1	MZ2_Blood & Batch_norm_dropMissing	573	0.002426300164611406	8
+tRNA-Ser-AGA-2-6	MZ2_Blood & Batch_norm_dropMissing	573	0.00262181222812967	9
+tRNA-Ser-AGA-2-6	DZ1_Blood & Batch_norm_dropMissing	302	0.005226287066974758	18
+tRNA-Ile-AAT-4-1	DZ1_Blood & Batch_norm_dropMissing	302	0.00602634878861646	23
+tRNA-iMet-CAT-1-4	DZ2_Blood & Batch_norm_dropMissing	302	1.7888633080859578e-4	5
+tRNA-Ser-AGA-2-6	DZ2_Blood & Batch_norm_dropMissing	302	2.3628681567349445e-4	7
+tRNA-Ile-AAT-4-1	DZ2_Blood & Batch_norm_dropMissing	302	2.550979830758687e-4	9

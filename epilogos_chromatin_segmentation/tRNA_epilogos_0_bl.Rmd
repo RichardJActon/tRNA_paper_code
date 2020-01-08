@@ -1,0 +1,513 @@
+---
+title: "tRNA epilogos"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+#runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+---
+
+# Introduction
+
+# Set-up
+
+## Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(patchwork)
+	#library(plotly)
+})
+```
+
+# Data Read-in
+
+```{r}
+key <- read_tsv("data/15stateModelKey.tsv") %>%
+	extract(
+		`COLOR CODE`,
+		into = c("r","g","b"),
+		regex = "(\\d+),(\\d+),(\\d+)"
+	) %>%
+	mutate(color = rgb(r,g,b,maxColorValue = 255))
+
+key
+```
+
+```{r}
+colorKey <- key$color
+#names(colorKey) <- key$`STATE NO.`
+names(colorKey) <- key$MNEMONIC
+```
+
+```{r}
+tRNAs <- read_tsv(
+	"../tRNA-GtRNAdb/hg19-tRNAs-SeqStrPseu.bed",
+	col_names = read_file(
+		"../tRNA-GtRNAdb/std_tRNA_header.txt"
+		) %>% 
+		gsub(pattern = "\n",replacement = "") %>%
+		str_split(pattern = "\t") %>% 
+		unlist() %>% 
+		c("pseudo","str","seq")
+	) %>%
+	extract(tRNAname,
+			c("nmt","aa","codon"),
+			"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-",
+			remove = FALSE
+	) %>% select(-score)
+```
+
+```{r}
+bltRNAs <- read_tsv(
+	"../tRNA-GtRNAdb/tRNAs-in-hg19-blacklist-v2.txt",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+```
+
+```{r}
+gwsBB6 <- read_tsv(
+	"../tRNA-GtRNAdb/BB_GWS_tRNA.txt",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+```
+
+```{r}
+swsBB23 <- read_tsv(
+	"../tRNA-GtRNAdb/swsBB23.tsv",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+```
+
+# Fxn
+
+## getEpilogos
+
+NB depends on tabix in the system environment
+
+```{r}
+getEpilogos <- function(chr,start,end) {
+	paste0(
+		"tabix https://explore.altius.org/tabix/epilogos/hg19.15.Blood_T-cell.KL.gz ",
+		chr, ":", start, "-", end
+	) %>%
+	system(intern = TRUE) %>% 
+	paste0("\n") %>% 
+	read_tsv(
+		col_names = c("chr","start","end","state"),
+		col_types = "ciic"
+	) %>%
+	extract(
+		state,
+		into = c("id","listState"),
+		regex = "id:(\\d+),qcat:\\[ (.*) \\]"
+	)
+}
+
+# rw <- 3
+# tmp <- getEpilogos(tRNAs$tChr[rw],tRNAs$tStart[rw],tRNAs$tEnd[rw])
+# tmp
+```
+
+```{r}
+getState <- function(str) {
+	mat <- str_match_all(
+		str,
+		pattern = "\\[(\\d+(?:\\.\\d+)?),(\\d+)\\]"
+	)[[1]]
+	
+	colnames(mat) <- c("raw","score","state")
+	
+	mat[,2:3] %>% 
+		as_tibble() %>%
+		mutate(
+			score = as.double(score),
+			state = as.integer(state)
+		) %>%
+		arrange(state)
+}
+#getState(tmp$listState[1])# %>% spread(state,score)
+```
+
+```{r}
+flankSize <- 200
+```
+
+# Body
+
+```{r,eval=FALSE}
+StateDataBytRNA <-
+tRNAs %>%
+	# head(10) %>% ###!!!
+	mutate(epilogos = mapply(
+		getEpilogos, tChr, tStart - flankSize, tEnd + flankSize, SIMPLIFY = FALSE, USE.NAMES = FALSE)
+	) %>% 
+	unnest() %>%
+	mutate(stateData = lapply(listState,getState)) %>%
+	select(-listState) %>%
+	unnest()
+```
+
+```{r, eval=FALSE}
+saveRDS(StateDataBytRNA,"data/StateDataBytRNA.Rds")
+```
+
+```{r}
+StateDataBytRNA <- readRDS("data/StateDataBytRNA.Rds")
+```
+
+# plots
+
+## plot preproc
+
+```{r}
+StateDataBytRNApdat <- 
+StateDataBytRNA %>%
+	left_join(key %>% select(MNEMONIC, state = `STATE NO.`), by = "state") %>%
+	mutate(state = as.character(state)) %>%
+	mutate(
+		aStart = case_when(
+			strand == "+" ~ tStart,
+			strand == "-" ~ tEnd
+		),
+		aEnd = case_when(
+			strand == "+" ~ tEnd,
+			strand == "-" ~ tStart
+		)
+	)
+```
+
+```{r}
+label <- function(nms){
+	#paste0(nm," (",tools::toTitleCase(StateDataBytRNApdat$tChr),")")
+	sapply(nms, function(nm) {
+		paste0(
+			nm," (",
+			StateDataBytRNApdat %>%
+				filter(tRNAname == nm) %>%
+				pull(tChr) %>%
+				unique() %>%
+				tools::toTitleCase(),
+			")"
+		)
+	})
+}
+```
+
+```{r}
+if(!dir.exists("graphics")) {
+	dir.create("graphics", showWarnings = FALSE, recursive = TRUE)
+}
+```
+
+## plots
+
+```{r, fig.width = 9, fig.asp = 10, eval = FALSE}
+alltRNAplots <- 
+StateDataBytRNApdat %>%
+	filter(!tRNAname %in% bltRNAs, nmt == "", pseudo == "HighConf", codon != "NNN") %>%
+	mutate(mid = (start + end) / 2) %>%
+	group_by(aa, codon) %>%
+	do(
+		plots = 
+		ggplot(.,aes(mid,score)) + 
+			# geom_col(
+			# 	#width = 0.9,
+			# 	position = "stack",
+			# 	aes(fill = MNEMONIC)#state)
+			# ) + 
+			geom_area(aes(fill = MNEMONIC),position = "stack") +
+			scale_fill_manual(values = colorKey) + 
+			scale_x_continuous(labels = scales::comma) + #scales::scientific_format()) + 
+			labs(
+				title = paste0(.$aa[1], "-", .$codon[1]),
+				fill = "State",
+				x = "position"
+			) +
+			facet_wrap(~tRNAname,scales = "free_x") +
+			theme(axis.text.x = element_text(angle = 25, vjust = 0.5))
+	) #%>%
+	#pull(plots)
+
+if(!dir.exists("graphics/alltRNAepilogos")) {
+	dir.create("graphics/alltRNAepilogos", showWarnings = FALSE, recursive = TRUE)
+}
+
+plotsaver <- function(df, i) {
+	df <- df[i,]
+	ggsave(
+		plot = df$plots[[1]],
+		filename = glue::glue("graphics/alltRNAepilogos/{df$aa}_{df$codon}.png"),
+		width = 9,
+		height = 10
+	)
+}
+purrr::iwalk(alltRNAplots$codon, ~plotsaver(alltRNAplots, .y))
+```
+
+```{r, fig.width = 9, fig.height = 10}
+StateDataBytRNApdat %>%
+	filter(!tRNAname %in% bltRNAs, nmt == "", pseudo == "HighConf", codon != "NNN") %>%
+	filter(
+		tRNAname %in% swsBB23
+	) %>%
+	mutate(mid = (start + end) / 2) %>%
+	ggplot(.,aes(mid,score)) + 
+			# geom_col(
+			# 	#width = 0.9,
+			# 	position = "stack",
+			# 	aes(fill = MNEMONIC)#state)
+			# ) + 
+			geom_area(aes(ymax = score,fill = MNEMONIC),position = "stack") +
+			scale_fill_manual(values = colorKey) + 
+			scale_x_continuous(labels = scales::comma) + #scales::scientific_format()) + 
+			labs(
+				# title = paste0(.$aa[1], "-", .$codon[1]),
+				fill = "State",
+				x = "position"
+			) +
+			facet_wrap(~tRNAname,scales = "free_x") +
+		theme(axis.text.x = element_text(angle = 55, vjust = 0.5))
+```
+
+```{r, fig.width = 9, fig.height = 10}
+toptRNAChromState <- 
+StateDataBytRNApdat %>%
+	filter(!tRNAname %in% bltRNAs, nmt == "", pseudo == "HighConf", codon != "NNN") %>%
+	filter(
+		tRNAname %in% swsBB23
+	) %>%
+	mutate(mid = (start + end) / 2) %>%
+	ggplot(.,aes(mid,score)) + 
+		# geom_col(
+		# 	#width = 0.9,
+		# 	position = "stack",
+		# 	aes(fill = MNEMONIC)#state)
+		# ) + 
+		geom_area(aes(fill = MNEMONIC),position = "stack") +
+		scale_fill_manual(values = colorKey) + 
+		scale_x_continuous(labels = scales::comma) + #scales::scientific_format()) + 
+		labs(
+			# title = paste0(.$aa[1], "-", .$codon[1]),
+			fill = "State",
+			x = "position"
+		) +
+		facet_wrap(~tRNAname,scales = "free_x",labeller = labeller(tRNAname = label)) +
+		theme(axis.text.x = element_text(angle = 55, vjust = 0.5)) + 
+		geom_segment(
+			aes(
+				x = aStart, y = -0.5, xend = aEnd, yend = -0.5
+			),
+			arrow = arrow(
+				length = unit(3, "points"),
+				type = "closed", angle = 20
+			),
+			size = 0.4
+		)
+toptRNAChromState #%>% ggplotly(dynamicTicks = TRUE)
+```
+
+```{r}
+ggsave(
+	toptRNAChromState,
+	filename = "graphics/toptRNAChromState_200bpF_tRNAarrows_BL.png",
+	width = 9,
+	height = 10
+)
+```
+
+```{r}
+maxScoreBytRNA <-
+StateDataBytRNApdat %>%
+	filter(
+		!tRNAname %in% bltRNAs, nmt == "", pseudo == "HighConf", codon != "NNN",
+		tChr %in% paste0("chr",1:22)
+	) %>%
+	mutate(mid = (start + end) / 2) %>%
+	select(tRNAname,score,MNEMONIC) %>%
+	group_by(tRNAname) %>%
+	filter(score == max(score)) %>%
+	distinct() %>%
+	ungroup()
+
+maxScoreBytRNA %>%
+	select(MNEMONIC) %>%
+	group_by(MNEMONIC) %>%
+	count() %>%
+	arrange(desc(n)) %>%
+	mutate(grp="grp") %>%
+	ggplot(aes(grp,n)) + 
+		geom_col(aes(fill = MNEMONIC)) + 
+		scale_fill_manual(values = colorKey)
+```
+
+```{r}
+maxScoreBytRNA %>%
+	mutate(
+		grp = tRNAname %in% swsBB23
+	) %>% 
+	filter(grp == FALSE) %>% 
+	distinct(tRNAname) %>% 
+	nrow()
+```
+
+```{r}
+mostPrevStateBytRNAge <- 
+maxScoreBytRNA %>%
+	mutate(grp = 
+		tRNAname %in% swsBB23
+	) %>%
+	select(MNEMONIC,grp) %>%
+	group_by(grp) %>%
+	mutate(Ngrp = n()) %>%
+	ungroup() %>%
+	group_by(MNEMONIC,grp) %>%
+	summarise(n = n(),frac = (n/Ngrp[1])*100, Ngrp = Ngrp[1]) %>%
+	#mutate(n = n(),frac = n/Ngrp) %>%
+	#distinct() %>%
+	arrange(desc(frac))
+
+mostPrevStateBytRNAge
+```
+
+```{r}
+preContingencyTable <- 
+mostPrevStateBytRNAge %>%
+	mutate(
+		chrstategrp = case_when(
+			grepl("ReprPC", MNEMONIC) ~ "polycomb repressed",
+			grepl("Enh", MNEMONIC) ~ "enhancer",
+			TRUE ~ MNEMONIC
+		)
+	) %>%
+	filter(chrstategrp %in% c("polycomb repressed", "enhancer")) %>%
+	group_by(chrstategrp,grp) %>%
+	summarise(n = sum(n), Ngrp = Ngrp[1] - n) %>%
+	ungroup()
+
+##  fill missing
+# preContingencyTable <- 
+# preContingencyTable %>% 
+# 	bind_rows(
+# 		data.frame(
+# 			chrstategrp = "polycomb repressed",
+# 			grp = TRUE,
+# 			n = 0,
+# 			Ngrp = 0,
+# 			stringsAsFactors = FALSE
+# 		)
+# 	)
+preContingencyTable
+```
+
+```{r}
+polycombContigTab <- 
+preContingencyTable %>% 
+	filter(chrstategrp == "polycomb repressed") %>%
+	select(n,Ngrp) %>%
+	data.matrix()
+
+rownames(polycombContigTab) <- c("rest","tRNAge")
+polycombContigTab
+```
+
+```{r}
+fisher.test(polycombContigTab)#, alternative = "less")
+```
+
+```{r}
+enhancerContigTab <- 
+preContingencyTable %>% 
+	filter(chrstategrp == "enhancer") %>%
+	select(n,Ngrp) %>%
+	data.matrix()
+
+rownames(enhancerContigTab) <- c("rest","tRNAge")
+enhancerContigTab
+```
+
+```{r}
+fisher.test(enhancerContigTab,alternative = "less")#, 
+```
+
+```{r}
+maxScoreBytRNAtRNAge6SplitPlot <- 
+mostPrevStateBytRNAge %>%
+	ggplot(aes(grp,frac)) + 
+		geom_col(aes(fill = MNEMONIC)) + 
+		scale_fill_manual(values = colorKey) + 
+	labs(
+		title = "Epilogos (Blood & T-Cells)",
+		x = "s.w.s. in MeDIP-seq (corrected)",
+		fill = "State",
+		y = "% of tRNA genes in which state has highest score"
+	)
+maxScoreBytRNAtRNAge6SplitPlot
+```
+
+```{r}
+ggsave(
+	maxScoreBytRNAtRNAge6SplitPlot,
+	filename = "graphics/maxScoreBytRNAtRNAge6SplitPlot_BL.png",
+	width = 9,
+	height = 9 * (9 / 16)
+)
+```
+
+# combined
+
+```{r,fig.width=7,fig.height=9,eval=FALSE}
+combinedEpilogosPlot <- {
+	maxScoreBytRNAtRNAge6SplitPlot + labs(tag = "A",) + 
+	guides(fill = guide_legend(label.position = "right", 
+	title.position = "left", title.vjust = 0.8)) + 
+	theme(legend.position = "bottom")
+} / {
+	toptRNAChromState + theme(legend.position = "none") + labs(tag = "B")
+}
+
+combinedEpilogosPlot
+```
+
+```{r,eval=FALSE}
+ggsave(
+	plot = combinedEpilogosPlot,
+	filename = "graphics/combinedEpilogosPlot_BL.png",
+	width = 7,
+	height = 9
+)
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>

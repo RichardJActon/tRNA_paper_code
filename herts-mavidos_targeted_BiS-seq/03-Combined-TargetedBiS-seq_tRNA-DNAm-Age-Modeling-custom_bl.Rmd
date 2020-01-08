@@ -1,0 +1,1606 @@
+---
+title: "tRNA gene methylation and age (Targeted BS-seq) - Age Modeling - 'manual'"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+# runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+bibliography: "`r normalizePath(params$bibliography)`"
+params:
+  bibliography: "../library.bib"
+---
+
+# Set-up
+## libs
+
+```{r}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(broom)
+	library(car)
+	library(MASS)
+	library(rlang)
+	library(ggrepel)
+	library(RColorBrewer)
+	library(karyoploteR)
+	library(ggplotify)
+	library(patchwork)
+})
+```
+
+```{r}
+nest <- nest_legacy
+unnest <- unnest_legacy
+```
+
+## Data Read-In
+
+## tRNA stuff
+
+```{r}
+BBGWStRNAs <- read_tsv(
+	"../tRNA-GtRNAdb/BB_GWS_tRNA.txt",
+	col_names = FALSE,
+	col_types = "c"
+) %>% 
+	unlist(use.names = FALSE)
+BBGWStRNAs
+```
+
+```{r}
+swsBB23 <- read_tsv(
+	"../tRNA-GtRNAdb/swsBB23.tsv",
+	col_names = FALSE,
+	col_types = "c"
+) %>% pull()
+```
+
+```{r}
+bltRNAs <- read_tsv(
+	"../tRNA-GtRNAdb/tRNAs-in-hg19-blacklist-v2.txt",
+	col_names = FALSE,
+	col_types = "c"
+) %>% pull()
+```
+
+```{r}
+swsBB23bl <- swsBB23[!swsBB23 %in% bltRNAs]
+```
+
+```{r}
+BBGWStRNAsbl <- BBGWStRNAs[!BBGWStRNAs %in% bltRNAs]
+```
+
+### Aggregated Methylation Data
+
+```{r}
+aggMethData <- readRDS(file = "data/combined-aggMethData.Rds")
+```
+
+## Cell count Estimates
+
+```{r}
+samplesheet <- read_tsv(file = "data/samplesheetCellCounts2.tab")
+```
+
+```{r}
+# samplesheet <- 
+# samplesheet %>% 
+# 	gather(key="cellType",value = "value",Houseman_Bcell:EpiDISH_Mono) %>%
+# 	separate(cellType,into = c("method","cellType"),sep = "_")
+```
+
+## Combining cell-count and Methylation data
+
+```{r}
+aggMethData <- left_join(
+	aggMethData,
+	samplesheet %>% dplyr::select(pool=Sample_Name,Houseman_Bcell:EpiDISH_Mono),
+	#samplesheet %>% select(pool=Sample_Name,Bcell:NK),
+	by="pool"
+) %>% filter(!tRNAname %in% bltRNAs)
+
+# aggMethData <- left_join(
+# 	aggMethData,
+# 	samplesheet %>% dplyr::select(pool=Sample_Name,method,cellType,value),
+# 	by="pool"
+# )
+```
+
+# Data Exploration
+
+## Age distribution
+
+```{r}
+aggMethData %>%
+	ggplot(aes(age)) +
+		geom_histogram(binwidth = 1)
+```
+
+## Methylation Distribution
+
+```{r}
+aggMethData %>%
+	ggplot(aes(meth)) +
+		geom_density()
+```
+
+## Cell-type proportion estimates
+
+```{r}
+cellTypeDensityPlot <- function(predType) {
+aggMethData %>%
+	dplyr::select(starts_with(predType)) %>%
+	gather(celltype, proportion) %>%
+	ggplot(aes(proportion)) +
+		geom_density(aes(colour = celltype)) + 
+		facet_wrap(~celltype, scales = "free")
+}
+```
+
+```{r}
+cellTypeDensityPlot("EpiDISH")
+```
+
+```{r}
+cellTypeDensityPlot("Houseman")
+```
+
+## Agreement between cell-count estimation methods
+
+```{r}
+houseman <- 
+aggMethData %>%
+	dplyr::select(age,starts_with("Houseman")) %>% 
+	distinct() %>%
+	mutate(predMethod = "Houseman")
+colnames(houseman) <- gsub(
+	pattern = "Houseman_", replacement = "", colnames(houseman)
+)
+colnames(houseman) <- gsub(
+	pattern = "cell", replacement = "", colnames(houseman)
+)
+
+epidish <- 
+aggMethData %>%
+	dplyr::select(age,starts_with("EpiDISH")) %>% 
+	distinct() %>%
+	mutate(predMethod = "EpiDISH")
+colnames(epidish) <- gsub(
+	pattern = "EpiDISH_", replacement = "", colnames(epidish)
+)
+
+bind_rows(houseman,epidish) %>%
+	gather(celltype,proportion,-predMethod,-age) %>%
+	spread(predMethod,proportion) %>%
+	(function(data){
+		models <- data %>% 
+			nest(-celltype) %>%
+			mutate(model=map(data,~lm(EpiDISH~Houseman,data=.))) %>% 
+			unnest(model %>% map(glance))
+		CTlabels <- function(values) {
+			sapply(values, function(value){
+				row <- models %>% filter(celltype == value)
+				p <- sprintf("%3.4g",row$p.value)
+				r2 <- sprintf("%.2g",row$r.squared)
+				paste0(value,"\nR^2 = ",r2," p-value: ",p)
+				#bquote(R^2~"="~.(r2)~"p-value:"~.(p))
+			})
+		}
+		plot <- data %>%
+		ggplot(aes(EpiDISH,Houseman)) + 
+			geom_point() + 
+			geom_smooth(method = "lm") +
+			#coord_equal() + 
+			facet_wrap(
+				~ celltype,
+				scales = "free",
+				labeller = labeller(celltype = CTlabels)
+			)
+		return(plot)
+	})
+```
+
+Cell-type proportion estimates of the houseman and EpiDISH methods are highly correlated, so choice of estimation method should matter little to the outcome.
+
+# Age Modeling
+
+## Functions
+
+```{r}
+# generate an extended 1 line summary of models applied across a given grouping variable 
+# with optional (non-interacting) covariates.
+fullSummaryModel <- function(data, dep, indep, group, ..., drop = TRUE) {
+	dep <- ensym(dep)
+	indep <- ensym(indep)
+	covar <- enquos(...)
+	covarStr <- data %>% dplyr::select(!!! covar) %>% colnames()
+	covarM <- ""
+	if(length(covar) > 0) {
+		covarM <- c("+", covarStr)
+		names(covarStr) <- covarStr
+	} 
+	grouper <- enquo(group)
+	data %>%
+		group_by(!!! grouper) %>%
+		nest() %>%
+		mutate(model = 
+			map(data,
+				~ lm(
+					as.formula(
+						paste0(
+							quo_name(dep),
+							"~",
+							quo_name(indep),
+							paste(covarM, collapse = "+")
+						)
+					),
+					data = .
+				)
+			)
+		) %>%
+		unnest(model %>% map(glance)) %>%
+		unnest(.drop = drop, model %>% map(tidy)) %>%
+		dplyr::select(-std.error, -statistic1, -p.value1) %>%
+		spread(term,estimate) %>%
+		dplyr::rename(
+			intercept=`(Intercept)`
+		) %>% 
+		arrange(p.value)
+}
+```
+
+```{r}
+blues <- c("cadetblue3", "dodgerblue4")
+```
+
+## model data
+
+Selecting model data
+- Targeted Alignment
+- coverage of 25 and over
+
+```{r}
+modelData <- 
+aggMethData %>%
+	filter(alignment == "Targeted") %>%
+	filter(coverage >= 25) %>%
+	unite(col = "pos", chr, start, end, sep = "-") %>%
+	mutate(rept = as.factor(rept)) 
+```
+
+```{r}
+modelData %>% head()
+modelData %>% dim()
+```
+
+```{r}
+tRNAsbldf <- modelData %>% 
+	distinct(tRNAname) %>% 
+	drop_na() %>% 
+	extract(
+		tRNAname,
+		c("nmt", "aa", "anticodon"),
+		"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-",
+		remove = FALSE
+	)
+tRNAsbldf
+
+tRNAsbl <- modelData %>% distinct(tRNAname) %>% drop_na() %>% pull()
+```
+
+```{r}
+NtRNAs <- 
+modelData %>% distinct(tRNAname) %>% drop_na() %>% nrow()
+NtRNAs
+
+nominalSig <- 0.05 / NtRNAs
+nominalSig
+sprintf("%.4e", nominalSig)
+```
+
+```{r}
+globalMeanMeth <- 
+modelData %>% 
+	group_by(tRNAname) %>% 
+	summarise(meanMeth = mean(meth))
+```
+
+## Modeling by tRNA gene
+
+### Naive
+
+Simple linear model not accounting for technical replicates
+
+```{r}
+ageModelsNaivetRNA <- 
+	fullSummaryModel(
+		data = modelData,
+		group = tRNAname,
+		dep = age,
+		indep = meth
+	)
+
+ageModelsNaivetRNA %>%
+	filter(p.value < 0.05)
+```
+
+### Including repeat as a __fixed__ effect
+
+repeat is inclused as a fixed effect becasue
+- not including it would exagerate the available information about biological variation by violating the independence assumption made by the model
+- it has at most 4 levels and is thus below the generally suggested at least 5 levels for including it as a random effect
+
+Selecting only those CpGs with data in at least 2 technical replicates
+
+```{r}
+goodInMoreThan1ReptRNA <-
+modelData %>%
+	group_by(tRNAname) %>%
+	dplyr::summarise(
+		x = rept %>% 
+			as.character() %>%
+			unique() %>%
+			length()
+	) %>%
+	filter(x > 1) %>%
+	pull(tRNAname)
+```
+
+```{r}
+ageModelsReptFixedtRNA <- 
+	modelData %>%
+	filter(tRNAname %in% goodInMoreThan1ReptRNA) %>%
+	fullSummaryModel(
+		data = .,
+		group = tRNAname,
+		dep = age,
+		indep = meth,
+		rept
+	)
+ageModelsReptFixedtRNA %>%
+	filter(p.value < 0.05)
+```
+
+```{r}
+bind_rows(
+	ageModelsReptFixedtRNA %>% 
+		dplyr::select(AIC) %>%
+		mutate(model = "ageModelsReptFixedtRNA"),
+	ageModelsNaivetRNA %>% 
+		dplyr::select(AIC) %>%
+		mutate(model = "ageModelsNaivetRNA")
+) %>%
+	ggplot(aes(AIC,colour=model)) + 
+		geom_density() 
+```
+
+### mean of repeats 
+
+```{r}
+modelDataMeanMeth <- 
+modelData %>%
+	mutate(seq = as.character(seq)) %>%
+	nest(-tRNAname, -pos) %>%
+	# mean across replicates by pool
+	mutate(
+		data = purrr::map(
+			data, function(x) {
+				x %>% 
+					group_by(pool, age, alignment, nmt, aa, codon, tRNAge, seq) %>%
+					group_by_at(vars(starts_with("Houseman")), .add = TRUE) %>%
+					# Bcell,CD4T,CD8T,Gran,Mono,NK
+					dplyr::summarise(meth = mean(meth))
+			}
+		)
+	) %>% 
+	unnest()
+```
+
+
+```{r}
+ageModelsReptMeanstRNA <- 
+modelData %>%
+	mutate(seq = as.character(seq)) %>%
+	nest(-tRNAname,-pos) %>%
+	# mean across replicates by pool
+	mutate(data = purrr::map(data, function(x) {x %>% 
+				group_by(pool, age, alignment, nmt, aa, codon, tRNAge, seq) %>%
+				group_by_at(vars(starts_with("Houseman")), .add = TRUE) %>%
+			# Bcell,CD4T,CD8T,Gran,Mono,NK
+				dplyr::summarise(meth = mean(meth))
+			}
+		)
+	) %>% 
+	unnest() %>%
+	fullSummaryModel(
+		group = tRNAname,
+		dep = age,
+		indep = meth#,
+		#starts_with("Houseman")
+	)
+ageModelsReptMeanstRNA %>%
+	filter(p.value < 0.05)
+```
+
+```{r}
+ageModelsReptMeanstRNA %>% 
+	dplyr::select(AIC) %>%
+	mutate(model = "ageModelsReptMeanstRNA") %>%
+	ggplot(aes(AIC,colour=model)) + 
+		geom_density()
+```
+
+#### Panels
+
+##### karyoplots
+
+```{r}
+tRNAdata <- read_tsv(
+	"../tRNA-GtRNAdb/hg19-tRNAs-SeqStrPseu.bed",
+	col_names = read_file(
+		"../tRNA-GtRNAdb/std_tRNA_header.txt"
+		) %>% 
+		gsub(pattern = "\n",replacement = "") %>%
+		str_split(pattern = "\t") %>% 
+		unlist() %>% 
+		c("pseudo","str","seq"),
+	col_types = "cddcdcdddddcccc"
+	) %>%
+	extract(tRNAname,
+			c("nmt","aa","anticodon"),
+			"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-",
+			remove = FALSE
+	)
+```
+
+```{r}
+getIsoDupsOftRNAs2highlight <- function(tRNAdata,tRNAs2highlight) {
+	anticodons <- gsub(
+		tRNAs2highlight,
+		pattern = ".*tRNA-(\\w+)-(\\w{3})-\\w+-\\w+",
+		replacement ="\\2", 
+		perl = TRUE
+	) %>% unique()
+	
+	aas <- gsub(
+		tRNAs2highlight,
+		pattern = ".*tRNA-(\\w+)-(\\w{3})-\\w+-\\w+",
+		replacement ="\\1", 
+		perl = TRUE
+	) %>% unique()
+	
+	tRNAdata %>%
+		filter(aa %in% aas, anticodon %in% anticodons)# %>%
+		#mutate(highlight = tRNAname %in% tRNAs2highlight)
+	
+}
+
+isoDupKaryo <- function(tRNAdata,tRNAs2highlight) {
+	df <- getIsoDupsOftRNAs2highlight(tRNAdata,tRNAs2highlight)
+	
+	dfh <- df %>% filter(tRNAname %in% tRNAs2highlight)
+	
+	dfs <- df %>% filter(!tRNAname %in% tRNAs2highlight)
+	
+	plotKaryotype(
+		chromosomes = unique(df$tChr),
+		plot.type = 2
+	) %>%
+	#kpAddBaseNumbers() %>%
+	kpPlotMarkers(
+		chr = dfh$tChr,
+		x = ((dfh$tStart + dfh$tEnd)/2),
+		labels = gsub(dfh$tRNAname,pattern = "(.*)tRNA-(.*)",replacement = "\\1\\2"),
+		label.color = "red",
+		text.orientation = "horizontal",
+		r1 = 0.8, cex = 0.6, #0.8
+		marker.parts = c(0.2, 0.7, 0.1),
+		data.panel = 1
+	) %>%
+	kpPlotMarkers(
+		chr = dfs$tChr,
+		x = ((dfs$tStart + dfs$tEnd)/2),
+		labels = gsub(dfs$tRNAname,pattern = "(.*)tRNA-(.*)",replacement = "\\1\\2"),
+		#label.color = cn_col,
+		text.orientation = "horizontal",
+		r1 = 0.8, cex = 0.6,
+		marker.parts = c(0.2, 0.7, 0.1),
+		data.panel = 2
+	)
+	#plot <- grid::grid.grabExpr()
+	#plot <- grid::grid.grab()
+	
+	#return(plot)
+}
+
+#selectediMetsKaryo <- isoDupKaryo(tRNAdata,selectediMets)
+
+#selectediMetsKaryo
+
+#grid::grid.grabExpr(selectediMetsKaryo)
+#isoDupKaryo(tRNAdata,selectediMets)
+#plot <- grid::grid.grab()
+
+#plot <- as.ggplot(expression(isoDupKaryo(tRNAdata,selectediMets)))
+
+
+#plot <- as.ggplot(expression(selectediMetsKaryo))
+```
+
+##### Linear
+
+```{r}
+poolColours <- c(
+	"4.07"="#ffffcc","4.09"="#CCCC56",
+	"28.07"="#a1dab4","28.23"="#3CA661",
+	
+	"77.22"="#225ea8","77.96"="#14488C",
+	"63.26"="#41b6c4","63.4"="#2899A8"#,
+	#"DNAm Age" = "red"
+)
+```
+
+```{r}
+labLookup <- c(
+	"4.07"="P1 (4)","4.09"="P2 (4)",
+	"28.07"="P3 (28)","28.23"="P4 (28)",
+	
+	"77.22"="P7 (77)","77.96"="P8 (77)",
+	"63.26"="P5 (63)","63.4"="P6 (63)"#,
+	#"DNAm Age" = "red"
+)
+
+poolColours <- c(
+	"P1 (4)"="#ffffcc","P2 (4)"="#CCCC56",
+	"P3 (28)"="#a1dab4","P4 (28)"="#3CA661",
+	
+	"P7 (77)"="#225ea8","P8 (77)"="#14488C",
+	"P5 (63)"="#41b6c4","P6 (63)"="#2899A8"#,
+	#"DNAm Age" = "red"
+)
+```
+
+
+```{r}
+# label <- function(tRNAname){
+# 	sapply(tRNAname, function(nm) {
+# 		df <- ageModelsReptMeanstRNA %>% 
+# 			filter(tRNAname == nm)
+# 		paste0(
+# 			df$tRNAname, "\n",
+# 			"p-value = ", sprintf("%.2e",df$p.value),
+# 			", R² = ", sprintf("%.2g",df$r.squared),
+# 			", Meth = ", sprintf("%.2g",df$meth), "Age + ",
+# 			sprintf("%.2g", df$intercept)
+# 		)
+# 	})
+# }
+
+# label <- function(tRNAnm, start = 0) {
+# 	sapply(seq_along(tRNAnm), function(nm) {
+# 		df <- ageModelsReptMeanstRNA %>% 
+# 			filter(tRNAname == tRNAnm[nm])
+# 		paste0(
+# 			"(",LETTERS[nm + start], ")	",
+# 			df$tRNAname, "\n",
+# 			"p-value = ", sprintf("%.2e",df$p.value),
+# 			", R² = ", sprintf("%.2g",df$r.squared)#,
+# 			#", y = ", sprintf("%.2g",df$meth), "x + ",
+# 			#sprintf("%.2g", df$intercept)
+# 		)
+# 	})
+# }
+```
+
+```{r}
+sigColors <- c("red", "orange", "black")
+names(sigColors) <- c(
+	paste0("p-value < ",sprintf("%.2e",nominalSig)),
+	paste0("p-value < ",sprintf("%.2e",0.05)),
+	"Not Sig."
+)
+	
+modelDataMeanMeth <- 
+modelDataMeanMeth %>%
+	left_join(
+		ageModelsReptMeanstRNA %>% dplyr::rename(meth_beta = meth),
+		by = "tRNAname"
+	) %>%
+	mutate(
+		sig = case_when(
+			p.value < nominalSig ~ paste0("p-value < ",sprintf("%.2e",nominalSig)),
+			p.value < 0.05 ~ paste0("p-value < ",sprintf("%.2e",0.05)),
+			TRUE ~ "Not Sig."
+		)
+	) %>%
+	mutate(sig = factor(sig,levels = names(sigColors), ordered = TRUE))
+```
+
+```{r}
+methPlotterLinear <- function(
+	data, tRNAs, commonMethScale = FALSE, poolColours, bw = FALSE, start = 0,
+	onerow = FALSE, legend = TRUE
+){
+	label <- function(tRNAnm, st = start) {
+		sapply(seq_along(tRNAnm), function(nm) {
+			df <- ageModelsReptMeanstRNA %>% 
+				filter(tRNAname == tRNAnm[nm])
+			paste0(
+				"(",LETTERS[nm + st], ")	",
+				df$tRNAname, "\n",
+				"p-value = ", sprintf("%.2e", df$p.value),
+				", R² = ", sprintf("%.2g", df$r.squared)#,
+				#", y = ", sprintf("%.2g",df$meth), "x + ",
+				#sprintf("%.2g", df$intercept)
+			)
+		})
+	}
+	
+	scaleStr <- ifelse(commonMethScale,"fixed","free_y")
+	
+	p <-
+	data %>%
+	filter(tRNAname %in% tRNAs) %>%
+	mutate(ageMean = age) %>%
+	arrange(ageMean) %>%
+	mutate(ageMean = as.character(round(ageMean, 2))) %>%
+	mutate(ageMean = labLookup[ageMean]) %>% ###!!!
+	mutate(ageMean = factor(ageMean, levels = unique(ageMean))) %>%
+	ggplot(aes(age, meth)) + 
+		geom_point(
+			aes(colour = ageMean),
+			show.legend = legend
+		) + #)+#
+		geom_smooth(
+			aes(colour = sig),
+			#show.legend = FALSE,
+			show.legend = legend,
+			#colour = "black",
+			method = "lm",
+			size = 0.5
+		) + 
+		facet_wrap(
+			~tRNAname,
+			scales = scaleStr,
+			#labeller = labeller(tRNAname = label(start = start)),
+			labeller = labeller(tRNAname = label),
+			#nrow = ifelse(onerow,1,NULL)
+			nrow = switch(onerow + 1, NULL, 1)
+		) +
+		scale_colour_manual(
+			drop = FALSE,
+			values = c(
+				rep(
+					each = 2,
+					poolColours
+					#c("#ffffcc","#a1dab4","#41b6c4","#225ea8") # Names?
+				),
+				sigColors
+			)
+		) +
+		labs(
+			#title = "Targeted Bisulfite Sequencing",
+			x = "Pool Mean Age /Yrs",
+			colour = "Age /Yrs",
+			y = "Methylation /%"
+		) + 
+		theme(
+			strip.text = element_text(hjust = 0)
+		) + 
+		guides(colour = guide_legend(override.aes = list(fill = NA)))
+	
+	if(bw == TRUE){
+		p <- p + theme_bw()
+	}
+	p
+}
+```
+
+
+```{r,fig.width=8,fig.asp=9/16}
+gwsBB6 <- c(
+	"tRNA-iMet-CAT-1-4",
+	"tRNA-Met-CAT-5-1",
+	"tRNA-Met-CAT-4-2",
+	"tRNA-Ile-AAT-1-1",
+	"tRNA-Ile-AAT-4-1",
+	"tRNA-Ser-AGA-2-6"
+)
+
+gwsBB6linear <- 
+methPlotterLinear(
+	modelDataMeanMeth,
+	tRNAs = gwsBB6,
+	commonMethScale = FALSE,
+	poolColours = poolColours
+)
+
+dir.create("graphics/ggplotObjs",recursive = TRUE)
+saveRDS(gwsBB6linear,"graphics/ggplotObjs/gwsBB6linear_bl.Rds")
+
+#dir.create("graphics/linePlots",recursive = TRUE)
+dir.create("graphics/linePlots/custom",recursive = TRUE)
+ggsave(
+	type = "cairo",
+	gwsBB6linear,
+	filename = "graphics/linePlots/custom/gwsBB6linear_bl.png",
+	width = 8,
+	height = 4.5
+)
+
+gwsBB6linear
+```
+
+```{r}
+ageModelsReptMeanstRNA %>% 
+	filter(tRNAname %in% gwsBB6) %>% 
+	dplyr::select(tRNAname, p.value, meth) %>% 
+	mutate(meth = sprintf("%.3g", meth))
+```
+
+```{r,fig.width=8,fig.asp=9/16}
+selectediMets <- c(
+		"tRNA-iMet-CAT-1-4",
+		#"tRNA-iMet-CAT-1-1",
+		"tRNA-iMet-CAT-1-2",
+		"tRNA-iMet-CAT-1-3",
+		"tRNA-iMet-CAT-1-5"#,
+		# "tRNA-iMet-CAT-1-6",
+		# "tRNA-iMet-CAT-1-8",
+		# "tRNA-iMet-CAT-2-1"
+	)
+
+selectiMetsLinear <- 
+methPlotterLinear(
+	modelDataMeanMeth,
+	tRNAs = selectediMets,
+	commonMethScale = TRUE,
+	poolColours = poolColours
+)
+
+ggsave(
+	type = "cairo",
+	selectiMetsLinear,
+	filename = "graphics/linePlots/custom/selectiMetsLinear_bl.png",
+	width = 8,
+	height = 4.5
+)
+
+selectiMetsLinear
+```
+
+```{r, fig.width = 8, fig.height = 6}
+selectiMetsLinearKaryo <- {
+	selectiMetsLinear + theme_bw()
+} / 
+	as.ggplot(expression(isoDupKaryo(tRNAdata,selectediMets))) + 
+	labs(tag = "E") + 
+	plot_layout(heights = c(5,3) )
+
+ggsave(
+	plot = selectiMetsLinearKaryo,
+	"graphics/linePlots/custom/selectiMetsLinearKaryo_bl.png",
+	width = 8,
+	height = 6
+)
+selectiMetsLinearKaryo
+```
+
+```{r, fig.width=8, fig.asp = 9/16}
+selectedSerAGAs <- c(
+		"tRNA-Ser-AGA-2-1",
+		"tRNA-Ser-AGA-2-4",
+		"tRNA-Ser-AGA-2-5",
+		"tRNA-Ser-AGA-2-6"
+	)
+selectSerAGAsLinear <- 
+methPlotterLinear(
+	modelDataMeanMeth,
+	tRNAs = selectedSerAGAs,
+	commonMethScale = TRUE,
+	poolColours = poolColours
+)
+
+ggsave(
+	type = "cairo",
+	selectSerAGAsLinear,
+	filename = "graphics/linePlots/custom/selectSerAGAsLinear_bl.png",
+	width = 8,
+	height = 4.5
+)
+
+selectSerAGAsLinear
+```
+
+```{r,fig.width=8,fig.height=6}
+selectSerAGAsLinearKaryo <- {
+	selectSerAGAsLinear + theme_bw()
+} / 
+	as.ggplot(expression(isoDupKaryo(tRNAdata,selectedSerAGAs))) + 
+	labs(tag = "E") + 
+	plot_layout(heights = c(5,3))
+
+ggsave(
+	plot = selectSerAGAsLinearKaryo,
+	"graphics/linePlots/custom/selectSerAGAsLinearKaryo_bl.png",
+	width = 8,
+	height = 6
+)
+selectSerAGAsLinearKaryo
+```
+
+
+```{r, fig.width = 12, fig.height = 10}
+selectedIleAATs <- c(
+		#"tRNA-Ile-AAT-1-1",
+		"tRNA-Ile-AAT-10-1",
+		"tRNA-Ile-AAT-11-1",
+		"tRNA-Ile-AAT-4-1",
+		#"tRNA-Ile-AAT-5-1",
+		#"tRNA-Ile-AAT-6-1",
+		"tRNA-Ile-TAT-2-2",
+		"tRNA-Ile-TAT-2-3",
+		"tRNA-Ile-TAT-2-1"#,
+	)
+#selectedIleAATs <- tRNAsbldf %>% filter(aa %in% "Ile") %>% pull(tRNAname)
+
+selectIleAATsLinear <- 
+methPlotterLinear(
+	modelDataMeanMeth,
+	tRNAs = selectedIleAATs,
+	commonMethScale = TRUE,
+	poolColours = poolColours
+)
+
+# ggsave(
+# 	type = "cairo",
+# 	selectIleAATsLinear,
+# 	filename = "../graphics/linePlots/custom/selectIleAATsLinear_bl.png",
+# 	width = 8,
+# 	height = 4.5
+# )
+
+selectIleAATsLinear
+```
+
+```{r,fig.width=8,fig.height=6}
+selectIleAATsLinearKaryo <- {
+	selectIleAATsLinear + theme_bw()
+} / 
+	as.ggplot(expression(isoDupKaryo(tRNAdata,selectedIleAATs))) + 
+	labs(tag = "G") + 
+	plot_layout(heights = c(5,3))
+
+ggsave(
+	plot = selectIleAATsLinearKaryo,
+	"graphics/linePlots/custom/selectIleAATsLinearKaryo_bl.png",
+	width = 8,
+	height = 6
+)
+selectIleAATsLinearKaryo
+```
+
+```{r,fig.width=8,fig.asp=9/16}
+selectedMetCATs <- c(
+		"tRNA-Met-CAT-2-1",
+		"tRNA-Met-CAT-4-2",
+		"tRNA-Met-CAT-4-3",
+		"tRNA-Met-CAT-5-1"
+	)
+	
+selectMetCATsLinear <- 
+methPlotterLinear(
+	modelDataMeanMeth,
+	tRNAs = selectedMetCATs,
+	commonMethScale = TRUE,
+	poolColours = poolColours
+)
+
+ggsave(
+	type = "cairo",
+	selectMetCATsLinear,
+	filename = "graphics/linePlots/custom/selectMetCATsLinear_bl.png",
+	width = 8,
+	height = 4.5
+)
+
+selectMetCATsLinear
+```
+
+```{r,fig.width=8,fig.height=6}
+selectMetCATsLinearKaryo <- {
+	selectMetCATsLinear + theme_bw()
+} / 
+	as.ggplot(expression(isoDupKaryo(tRNAdata,selectedMetCATs))) + 
+	labs(tag = "E") + 
+	plot_layout(heights = c(5,3))
+
+ggsave(
+	plot = selectMetCATsLinearKaryo,
+	"graphics/linePlots/custom/selectMetCATsLinearKaryo_bl.png",
+	width = 8,
+	height = 6
+)
+selectMetCATsLinearKaryo
+```
+
+```{r, fig.width = 8, fig.asp = 9/16}
+#```{r,fig.width=10,fig.height=16}
+selectedVals <- c(
+		"tRNA-Leu-TAG-2-1",
+		"tRNA-Leu-TAA-3-1",
+		"tRNA-Leu-AAG-3-1",
+		"tRNA-Leu-TAA-1-1"#,
+	)
+	
+#selectedVals <- tRNAsbldf %>% filter(aa %in% "Leu") %>% pull(tRNAname)
+
+selectedValsLinear <- 
+methPlotterLinear(
+	modelDataMeanMeth,
+	tRNAs = selectedVals,
+	commonMethScale = TRUE,
+	poolColours = poolColours
+)
+
+ggsave(
+	type = "cairo",
+	selectedValsLinear,
+	filename = "graphics/linePlots/custom/selectedValsLinear_bl.png",
+	width = 8,
+	height = 4.5
+)
+
+selectedValsLinear
+```
+
+```{r,fig.width=8,fig.height=6}
+selectedValsLinearKaryo <- 
+{selectedValsLinear + theme_bw()} / 
+	as.ggplot(
+		expression(
+			isoDupKaryo(
+				tRNAdata %>% filter(
+					nmt == "", tChr != "chrX",
+					tChr %in% (
+						tRNAdata %>% 
+							filter(tRNAname %in% selectedVals) %>% 
+							pull(tChr) %>% 
+							unique()
+					)
+				),
+				selectedVals
+			)
+		)
+	) + 
+	labs(tag = "E") + 
+	plot_layout(heights = c(5,3)
+)
+
+ggsave(
+	plot = selectedValsLinearKaryo,
+	"graphics/linePlots/custom/selectedValsLinearKaryo_bl.png",
+	width = 8,
+	height = 6
+)
+selectedValsLinearKaryo
+```
+
+```{r, fig.width = 12, fig.asp = 9/16}
+modelDataMeanMeth %>% 
+	group_by(codon,aa) %>%
+	distinct(tRNAname) %>%
+	do(plot = methPlotterLinear(
+		modelDataMeanMeth,
+		tRNAs = .$tRNAname,
+		commonMethScale = TRUE,
+		poolColours = poolColours
+)) %>% pull(plot)
+```
+
+```{r, fig.width = 13, fig.height=13}
+#fig.asp = 12/16}
+combinedKaryoplots <- 
+(
+	methPlotterLinear(
+		bw = TRUE,
+		modelDataMeanMeth,
+		tRNAs = selectediMets,
+		commonMethScale = TRUE,
+		poolColours = poolColours,
+		legend = FALSE,
+		#onerow = TRUE,
+		start = 0
+	) / (
+		as.ggplot(expression(isoDupKaryo(tRNAdata, selectediMets))) +
+		labs(tag = "E") 
+	) | 
+	methPlotterLinear(
+		bw = TRUE,
+		modelDataMeanMeth,
+		tRNAs = selectedSerAGAs,
+		commonMethScale = TRUE,
+		poolColours = poolColours,
+		#onerow = TRUE,
+		legend = FALSE,
+		start = 5
+	) / ( 
+		as.ggplot(expression(isoDupKaryo(tRNAdata, selectedSerAGAs))) + 
+		labs(tag = "J")
+	) 
+) / (
+	methPlotterLinear(
+		bw = TRUE,
+		modelDataMeanMeth,
+		tRNAs = selectedIleAATs,
+		commonMethScale = TRUE,
+		poolColours = poolColours,
+		#onerow = TRUE,
+		legend = FALSE,
+		start = 10
+	) / ( 
+		as.ggplot(expression(isoDupKaryo(tRNAdata, selectedIleAATs))) +
+		labs(tag = "Q")
+	) | (
+		methPlotterLinear(
+			bw = TRUE,
+			modelDataMeanMeth,
+			tRNAs = selectedVals,
+			commonMethScale = TRUE,
+			poolColours = poolColours,
+			#onerow = TRUE,
+			#legend = FALSE,
+			start = 17
+		) + 
+		theme(legend.position="bottom")
+	) / (
+		as.ggplot(
+			expression(
+				isoDupKaryo(
+					tRNAdata %>% filter(
+						nmt == "", tChr != "chrX",
+						tChr %in% (
+							tRNAdata %>% 
+								filter(tRNAname %in% selectedVals) %>% 
+								pull(tChr) %>% 
+								unique()
+						)
+					),
+					selectedVals
+				)
+			)
+		)+
+		labs(tag = "V")
+	)
+)
+
+combinedKaryoplots
+```
+
+```{r}
+ggsave(
+	plot = combinedKaryoplots,
+	filename = "graphics/combinedKaryoplots_sig_bl.png",
+	width = 13,
+	height = 13
+)
+```
+
+##### Violin
+
+```{r}
+letterLabs <- function(nm){
+	paste0("(",LETTERS[seq_along(nm)],")	",nm)
+}
+
+methplotter <- function(data, tRNAs, commonMethScale = FALSE, poolColours, showtRNAge = FALSE){
+	scaleStr <- ifelse(commonMethScale, "free_y", "free")
+	
+	data %>%
+	mutate(
+		ageBand = case_when(
+			age > 3 & age < 5 ~ 4,
+			age > 27 & age < 30 ~ 28,
+			age > 61 & age < 65 ~ 63,
+			age > 76 & age < 80 ~ 78
+		)
+	) %>% mutate(
+		ageBand = factor(
+			x = ageBand,
+			levels = sort(unique(ageBand)),
+			ordered = TRUE
+		)
+	) %>%
+	filter(tRNAname %in% tRNAs) %>%
+	#filter(type == "meth") %>%
+	mutate(age = as.double(as.character(age))) %>%
+	arrange(age) %>%
+	mutate(age = as.character(round(age,2))) %>%
+	mutate(age = labLookup[age]) %>% ###!!!
+	mutate(age = factor(age,levels=unique(age))) %>%
+	mutate(
+		ageBand=factor(ageBand,levels=unique(ageBand),ordered = TRUE)
+	) %>%
+	ggplot(aes(ageBand,meth)) + 
+		geom_violin(
+			aes(fill=age),
+			position = "dodge",
+			draw_quantiles = c(0.25, 0.5, 0.75),
+			alpha = 0.8
+		) + 
+		geom_jitter(
+			aes(fill=age),
+			position = position_jitterdodge(),
+			show.legend = FALSE,
+			shape = 4
+		) + 
+		facet_wrap(
+			~tRNAname,
+			#scales = "free_x"
+			scales = scaleStr,
+			labeller = labeller(tRNAname = letterLabs)
+		) +
+		scale_fill_manual(
+			values = rep(
+				each = 2,
+				poolColours
+				#c("#ffffcc","#a1dab4","#41b6c4","#225ea8") # Names?
+			)
+		) +
+		scale_colour_manual(
+			values = c("TRUE" = "red","FALSE" = "darkgrey"),
+			limits = c("TRUE", "FALSE"),
+			drop = FALSE
+		) +
+		#scale_shape_manual(values = 21:24) + 
+		stat_summary(
+			aes(colour = tRNAge, group = 1),#y=value,
+			fun.y = mean,
+			geom = "line",
+			size = 1,
+			show.legend = showtRNAge
+		) +
+		labs(
+			#title = "Targeted Bisulfite Sequencing",
+			x = "Age group /yrs",
+			y = "Methylation /%",
+			fill = "Pool"
+		) + 
+		theme(strip.text = element_text(hjust = 0)) + 
+		theme_bw()
+}
+```
+
+```{r,fig.width = 8, fig.asp = 9/16}
+gwsBB6violin <- 
+methplotter(
+	data = modelDataMeanMeth , #plotDataBytRNA,
+	tRNAs = c(
+		"tRNA-iMet-CAT-1-4",
+		"tRNA-Met-CAT-5-1",
+		"tRNA-Met-CAT-4-2",
+		"tRNA-Ile-AAT-1-1",
+		"tRNA-Ile-AAT-4-1",
+		"tRNA-Ser-AGA-2-6"
+	),
+	commonMethScale = FALSE,
+	poolColours = poolColours
+	
+)
+
+#dir.create("../graphics/ggplotObjs",recursive = TRUE)
+saveRDS(gwsBB6violin,"graphics/ggplotObjs/gwsBB6violin_bl.Rds")
+
+#dir.create("../graphics/linePlots",recursive = TRUE)
+dir.create("graphics/violinPlots/custom",recursive = TRUE)
+ggsave(
+	type = "cairo",
+	gwsBB6violin,
+	filename = "graphics/violinPlots/custom/gwsBB6violin_bl.png",
+	width = 8,
+	height = 4.5
+)
+
+gwsBB6violin
+```
+
+#### Volcanish
+
+```{r, fig.width = 8, fig.height = 7}
+ageModelsReptMeanstRNAVolcanish <- 
+ageModelsReptMeanstRNA %>%
+	left_join(globalMeanMeth,by = "tRNAname") %>%
+	mutate(BBgws = tRNAname %in% BBGWStRNAs) %>%
+	mutate(
+		label = if_else((p.value < nominalSig) | (BBgws), tRNAname, "")
+	) %>%
+	ggplot(aes(meth,-log10(p.value))) + 
+		geom_point(aes(size = meanMeth, colour = BBgws), alpha = 0.5) + 
+		scale_colour_manual(values = c("TRUE" = "red", "FALSE" = "black")) + 
+		geom_text_repel(aes(label = label)) + 
+		geom_hline(aes(yintercept = -log10(nominalSig))) + 
+		labs(
+			title = "Target Bisulfite sequencing",
+			subtitle = paste0(
+				"p <", 
+				sprintf("%.2e", nominalSig),
+				" | Predicting age by tRNA locus with Mean methylation by pool"
+			),
+			caption = "lm(age ~ DNAm)",
+			colour = "MeDIP-seq",
+			size = "Mean Meth",
+			x = "Model Slope"
+		)
+		#scale_x_log10()
+
+ageModelsReptMeanstRNAVolcanish %>%
+	ggsave(
+		filename = "graphics/ageModelsReptMeanstRNAVolcanish_bl.png",
+		width = 8,
+		height = 7
+	)
+
+ageModelsReptMeanstRNAVolcanish
+```
+
+### mean of repeats with cell-type
+
+```{r}
+ageModelsReptMeanstRNACT <- 
+modelData %>%
+	mutate(seq = as.character(seq)) %>%
+	nest(-tRNAname, -pos) %>%
+	# mean across replicates by pool
+	mutate(data = purrr::map(data,function(x) {x %>% 
+				group_by(pool, age, alignment, nmt, aa, codon, tRNAge, seq) %>%
+				group_by_at(vars(starts_with("Houseman")), .add = TRUE) %>%
+			# Bcell,CD4T,CD8T,Gran,Mono,NK
+				dplyr::summarise(meth=mean(meth))
+			}
+		)
+	) %>% 
+	unnest() %>%
+	fullSummaryModel(
+		group = tRNAname,
+		dep = age,
+		indep = meth,
+		starts_with("Houseman")
+	)
+ageModelsReptMeanstRNACT %>%
+	filter(p.value < 0.05)
+```
+
+```{r}
+ageModelsReptMeanstRNACT %>% 
+	dplyr::select(AIC) %>%
+	mutate(model = "ageModelsReptMeanstRNACT") %>%
+	ggplot(aes(AIC,colour=model)) + 
+		geom_density()
+```
+
+### Including Repeat and predicted cell type
+
+```{r}
+ageModelsReptFixedtRNACT <- 
+	modelData %>%
+	filter(tRNAname %in% goodInMoreThan1ReptRNA) %>%
+	fullSummaryModel(
+		data = .,
+		group = tRNAname,
+		dep = age,
+		indep = meth,
+		rept,
+		starts_with("Houseman")#,
+		#drop = FALSE
+	)
+ageModelsReptFixedtRNACT %>%
+	filter(p.value < 0.05)
+```
+
+```{r}
+ageModelsReptFixedtRNACT %>% 
+	dplyr::select(AIC) %>%
+	mutate(model = "ageModelsReptFixedtRNACT") %>%
+	ggplot(aes(AIC, colour = model)) + 
+		geom_density()
+```
+
+Cell-type proportion estimates appear to strongly predict pool and age alone, (see their density plots), adding them to the model as fixed effects produces extremely low p-values
+
+# Modeling by individual CpG
+
+Get CpGs with data in more than one technical replicate
+
+```{r}
+goodInMoreThan1Rep <-
+modelData %>%
+	group_by(pos) %>%
+	dplyr::summarise(
+		x = rept %>% 
+			as.character() %>%
+			unique() %>%
+			length()
+	) %>%
+	filter(x > 1) %>%
+	pull(pos)
+```
+
+### Naive linear modeling
+
+```{r}
+ageModelsNaive <- 
+	fullSummaryModel(
+		data = modelData,
+		group = pos,
+		dep = age,
+		indep = meth
+	)
+ageModelsNaive %>%
+	filter(p.value < 0.05)
+```
+
+```{r}
+ageModelsNaive %>% 
+	dplyr::select(AIC) %>%
+	mutate(model = "ageModelsNaive") %>%
+	ggplot(aes(AIC,colour=model)) + 
+		geom_density()
+```
+
+### Including repeat as a __fixed__ effect
+
+```{r}
+ageModelsFixedRept <- modelData %>%
+	filter(pos %in% goodInMoreThan1Rep) %>%
+		fullSummaryModel(
+		group = pos,
+		dep = age,
+		indep = meth,
+		rept
+	)
+ageModelsFixedRept %>%
+	filter(p.value < 0.05)
+```
+
+```{r}
+ageModelsFixedRept %>% 
+	dplyr::select(AIC) %>%
+	mutate(model = "ageModelsFixedRept") %>%
+	ggplot(aes(AIC,colour=model)) + 
+		geom_density()
+```
+
+# Mean of repeats
+
+```{r}
+ReptMeansPos <- 
+modelData %>%
+	nest(-tRNAname) %>%
+	# mean across replicates by pool
+	mutate(data = purrr::map(data,function(x) {x %>% 
+			mutate(seq = as.character(seq)) %>%
+				#group_by(tRNAname,pool,age,alignment,nmt,aa,codon,tRNAge,seq) %>%
+				group_by(
+					pos, pool, age, alignment, nmt, aa, codon, tRNAge, seq
+				) %>%
+				group_by_at(vars(starts_with("Houseman")),.add = TRUE) %>%
+			# Bcell,CD4T,CD8T,Gran,Mono,NK
+				dplyr::summarise(meth = mean(meth))
+			}
+		)
+	) %>% 
+	unnest()
+```
+
+```{r}
+ageModelsReptMeansPos <- 
+ReptMeansPos %>%
+	fullSummaryModel(
+		group = pos,# tRNAname,
+		dep = age,
+		indep = meth#,
+		#starts_with("Houseman")
+	)
+ageModelsReptMeansPos %>%
+	filter(p.value < 0.05)
+```
+
+```{r}
+ageModelsReptMeansPosPlus <- 
+left_join(
+	ReptMeansPos,
+	ageModelsReptMeansPos %>% dplyr::rename(methSlope = meth),
+	by = "pos"
+)
+
+#gwsBB6
+
+ageModelsReptMeansPosPlusPlotter <- function(tRNAs, sig = 1) {
+	CpGlabller <- function(pos) {
+		sapply(pos, function(p) {
+			df <- ageModelsReptMeansPosPlus %>%
+				distinct(
+					pos, tRNAname, r.squared, p.value, methSlope, intercept
+				) %>%
+				filter(pos == p) %>%
+				extract(
+					pos,into = c("chr", "start", "end"),
+					regex = "(chr\\w+)-(\\d+)-(\\d+)",
+					convert = TRUE
+				)
+			#df
+			paste0(
+				#df$pos, 
+				tools::toTitleCase(df$chr), " : ",
+				format(df$start, big.mark = ","), #" - ",
+				#format(df$end, big.mark = ","),
+				"\nR² = ", sprintf("%.2g", df$r.squared),
+				", p-value = ", sprintf("%.2e", df$p.value)#,
+				#"\ny = ", sprintf("%.2g", df$methSlope),
+				#"x ",
+				#ifelse(sign(df$intercept) == 1,"+","-")," ",
+				#sprintf("%.2g", abs(df$intercept))
+			)
+		})
+	}
+	
+	ageModelsReptMeansPosPlus %>%
+	filter(p.value < sig) %>%
+	filter(
+		tRNAname %in% tRNAs
+	) %>%
+	group_by(tRNAname) %>%
+	mutate(ageMean = age) %>%
+	arrange(ageMean) %>%
+	mutate(ageMean = as.character(round(ageMean, 2))) %>%
+	mutate(ageMean = labLookup[ageMean]) %>% ###!!!
+	#mutate(ageMean = factor(ageMean, levels = unique(ageMean))) %>%
+	do(
+		plots = ggplot(., aes(age,meth)) + 
+			geom_smooth(method = "lm", colour = "black", size = 0.5) + 
+			geom_point(aes(colour = ageMean), show.legend = FALSE) +
+			facet_wrap(~pos, labeller = labeller(pos = CpGlabller)) + 
+			scale_colour_manual(
+				values = rep(
+					each = 2,
+					poolColours
+					#c("#ffffcc","#a1dab4","#41b6c4","#225ea8") # Names?
+				)
+			) +
+			#facet_wrap(pos~tRNAname) + 
+			#facet_grid(tRNAname ~ pos) +
+			labs(
+				title = .$tRNAname,
+				x = "Age /yrs",
+				y = "Methylation /%",
+				colour = "Age /yrs"
+			) + 
+			theme_bw()
+	) 
+}
+
+ageModelsReptMeansPosPlusPlots <- 
+ageModelsReptMeansPosPlusPlotter(
+	tRNAs = c(
+		selectediMets,
+		selectedMetCATs,
+		selectedIleAATs,
+		selectedSerAGAs
+	),
+	sig = 0.05
+)
+
+ageModelsReptMeansPosPlusPlots %>% 
+	pull(plots)
+```
+
+```{r, fig.width = 9, fig.asp = 9/16}
+ageModelsReptMeansPosPlusPlotter(gwsBB6,sig = 0.05) %>% pull(plots)
+```
+
+```{r}
+if(!dir.exists("graphics/nomSig_CpG")) {
+	dir.create("graphics/nomSig_CpG")
+}
+
+nil <- 
+ageModelsReptMeansPosPlusPlots %>%
+	do(
+		res = ggsave(
+			plot = .$plots,
+			filename = paste0("graphics/nomSig_CpG/", .$tRNAname, "_nomSig_CpG_bl.png"),
+			width = 7,
+			height = 7
+		)
+	)
+```
+
+
+```{r}
+ageModelsReptMeansPos %>% 
+	dplyr::select(AIC) %>%
+	mutate(model = "ageModelsReptMeansPos") %>%
+	ggplot(aes(AIC,colour=model)) + 
+		geom_density()
+```
+
+#### plots
+
+### Mean of repeats with cell-type
+
+```{r}
+ageModelsReptMeansPosCT <- 
+modelData %>%
+	nest(-pos) %>%
+	# mean across replicates by pool
+	mutate(data = purrr::map(data,function(x) {x %>% 
+				group_by(tRNAname,pool,age,alignment,nmt,aa,codon,tRNAge,seq) %>%
+				group_by_at(vars(starts_with("Houseman")),.add = TRUE) %>%
+			# Bcell,CD4T,CD8T,Gran,Mono,NK
+				dplyr::summarise(meth=mean(meth))
+			}
+		)
+	) %>% 
+	unnest() %>%
+	fullSummaryModel(
+		group = tRNAname,
+		dep = age,
+		indep = meth,
+		starts_with("Houseman")
+	)
+ageModelsReptMeansPosCT %>%
+	filter(p.value < 0.05)
+```
+
+```{r}
+ageModelsReptMeansPosCT %>% 
+	dplyr::select(AIC) %>%
+	mutate(model = "ageModelsReptMeansPosCT") %>%
+	ggplot(aes(AIC,colour=model)) + 
+		geom_density()
+```
+
+### Including repeat and Cell-type as __fixed__ effects
+
+```{r}
+ageModelsFixedReptCT <- modelData %>%
+	filter(pos %in% goodInMoreThan1Rep) %>%
+		fullSummaryModel(
+		group = pos,
+		dep = age,
+		indep = meth,
+		rept,
+		starts_with("Houseman")
+	)
+ageModelsFixedReptCT %>%
+	filter(p.value < 0.05)
+```
+
+```{r}
+ageModelsFixedReptCT %>% 
+	dplyr::select(AIC) %>%
+	mutate(model = "ageModelsFixedReptCT") %>%
+	ggplot(aes(AIC,colour=model)) + 
+		geom_density()
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References

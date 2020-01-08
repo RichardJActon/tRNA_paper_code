@@ -1,0 +1,628 @@
+---
+title: "tRNA gene methylation and age (Targeted BS-seq) - Pre-processing"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+# runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+bibliography: "`r normalizePath(params$bibliography)`"
+params:
+  bibliography: "../library.bib"
+  out: "out/"
+  data: "data/"
+  graphics: "graphics/"
+  tRNAStuff: "../tRNA-GtRNAdb/"
+  alignmentOut: "/home/richardjamesacton/mounted/scratch/tRNA/targetedBSseq/src/run_7299205/"
+---
+
+# Set-up
+
+```{r}
+dir.create(params$out, showWarnings = FALSE, recursive = TRUE)
+dir.create(params$graphics, showWarnings = FALSE, recursive = TRUE)
+```
+
+## libs
+
+```{r}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(kableExtra)
+})
+```
+
+## Data Read-In
+
+### location of CpGs in tRNAs
+
+```{r}
+tRNACpGsFull <- read.table(
+	file = paste0(params$tRNAStuff,"/hg19-tRNAs-100bp53-SeqStrPseu-CpGs.bed"),
+	col.names = c(
+		read_delim(delim = "\t",
+		file = paste0(params$tRNAStuff, "/std_tRNA_header.txt"),
+		col_names = FALSE,
+		col_types = "cccccccccccc") %>% as.character(),
+		"possPseudo","struct","seq","chr","start","end","CpG"
+	)
+) 
+
+tRNACpGs <- tRNACpGsFull %>%
+	select(
+		chr, start, end, tRNAname, strand,
+		thickStart, thickEnd, possPseudo, struct, seq
+	) %>%
+	extract(tRNAname,
+			c("nmt","aa","codon"),
+			"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-",
+			remove = FALSE
+	)
+```
+
+### 'tRNAge' genes
+
+```{r}
+tRNAgeVec <- read.table(
+	paste0(params$tRNAStuff, "/GenWideSigWintRNAs.txt"),
+	stringsAsFactors = FALSE
+) %>%
+	unlist(use.names = FALSE)
+```
+
+### list of tRNAs targeted in sequencing experiments
+
+```{r}
+tRNAsTargeted <- 
+	read_tsv(
+		paste0(params$out,"PrimerSetsCombined.tab"),
+		col_types = "cciiciiddiciiddicidi"
+	) %>%
+	select(tRNAname) %>%
+	mutate(locus = seq_along(tRNAname)) %>%
+	extract(tRNAname,
+			c("nmt","aa","codon"),
+			"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-",
+			remove = FALSE
+	)
+```
+
+```{r}
+tRNAsTargeted %>% group_by(aa,codon) %>% dplyr::summarise(n())
+```
+
+```{r}
+tRNAsTargeted %>% 
+	mutate(tRNAge = tRNAname %in% tRNAgeVec) %>%
+	write_tsv(paste0(params$out,"tRNAsInTargetedBisSeq_tRNAge.tsv"))
+```
+
+```{r}
+sampleMetaData <- read_delim(
+	file = paste0(params$data, "/sampleMetaDataProcessed.tab"), ## !! Not Public?
+	delim = "\t",
+	col_types = "cdcccdidc",
+	col_names = TRUE
+)
+```
+
+#### Age by Pool stats
+
+```{r}
+# get the mean age of the samples in the pools
+meanAgeByPool <- 
+sampleMetaData %>% 
+	group_by(pool) %>%
+	dplyr::summarise(age = mean(age)) #%>%
+	#dplyr::rename(Sample_Name=pool) # rename for combining with samplesheet
+# meanAgeByPool
+poolAgeProperties <- 
+sampleMetaData %>% 
+	group_by(pool, sex) %>%
+	dplyr::summarise(
+		range = max(age) - min(age),
+		sd = sd(age),
+		age = mean(age),
+		min = min(age),
+		max = max(age),
+		n=n()
+	) %>%
+	mutate(sex = gsub(sex, pattern = "(\\w{1}).*", replacement = "\\1"))
+poolAgeProperties
+```
+
+## DNAmAge
+
+previously computed using @Horvath2013 method as a part of the Analysis of the EPIC array data
+
+```{r}
+DNAmAgeRes <- read.csv(
+	"../herts-mavidos_EPIC/data/clockProbesBetas.output.csv"
+)
+
+poolAgeProperties <- 
+left_join(
+	poolAgeProperties,
+	DNAmAgeRes %>% 
+		mutate(pool = gsub(SampleID, pattern = "_", replacement = " ")) %>% 
+		select(pool, DNAmAge),
+	by = "pool"
+)
+```
+
+# Age by Pool Plots
+
+```{r,fig.width=6,fig.height=8}
+poolAgeLabeler <- function(pools) {
+	#meanAgeByPool <- as.data.frame(meanAgeByPool)
+	df <- poolAgeProperties
+	sapply(pools, function(p){
+		paste0(
+			df %>% 
+				filter(pool == p) %>% 
+				pull(pool),
+			" (Mean Age: ",
+			sprintf(
+				"%5.2f",
+				df %>% 
+					filter(pool == p) %>% 
+					pull(age)
+			),
+			", n = ",
+			df %>% 
+				filter(pool == p) %>% 
+				pull(n),
+			", Sex = ",
+			df %>% 
+				filter(pool == p) %>% 
+				pull(sex),
+			")"
+		)
+	})
+}
+
+SampleAgesPlotByPool <- 
+sampleMetaData %>% 
+	ggplot(aes(age)) + 
+		geom_histogram(bins = 7) + 
+		geom_vline(
+			data = meanAgeByPool,
+			aes(
+				xintercept = age,
+				colour = "Mean"
+			),
+			show.legend = FALSE
+		) + 
+		# geom_vline(
+		# 	data = poolAgeProperties,
+		# 	aes(
+		# 		xintercept = DNAmAge,
+		# 		colour = "DNAm"
+		# 	)#,
+		# 	#show.legend = FALSE
+		# ) + 
+		facet_wrap(
+			~pool,
+			scales = "free_x",
+			ncol = 2,
+			labeller = labeller(pool = poolAgeLabeler)
+		) + 
+		labs(
+			title = "Ages of individuals in pooled samples",
+			subtitle = "Targeted Bisulfite Sequencing",
+			x="Age /yrs",
+			colour = "Age"
+		)
+
+ggsave(
+	SampleAgesPlotByPool,
+	filename = paste0(params$graphics, "SampleAgesPlotByPool.png"),
+	width = 7,
+	height = 8
+)
+
+SampleAgesPlotByPool
+```
+
+```{r, fig.width = 6, fig.asp = 9/16}
+poolColours <-c(
+	"Pool 1" = "#ffffcc", "Pool 2" = "#CCCC56",
+	"Pool 3" = "#a1dab4", "Pool 4" = "#3CA661",
+	
+	"Pool 5" = "#225ea8", "Pool 6" = "#14488C",
+	"Pool 7" = "#41b6c4", "Pool 8" = "#2899A8",
+	"DNAm Age" = "red"
+)
+SampleAgesPlotByPoolComb <- 
+sampleMetaData %>% 
+	mutate(
+		pairs = if_else(
+			pool %in% c("Pool 1", "Pool 3", "Pool 5", "Pool 7"),
+			"1st Pools", "2nd Pools"
+		)
+	) %>%
+	ggplot(aes(age)) + 
+		geom_histogram(
+			aes(fill = pool),
+			#bins = 7
+			binwidth = 1
+		) + 
+		geom_vline(
+			data = meanAgeByPool,
+			aes(
+				xintercept = age,
+				colour = pool#"Mean"
+			),
+			show.legend = FALSE
+		) + 
+		facet_wrap(~pairs, ncol = 1) +
+		scale_fill_manual(
+			values = poolColours
+		) +
+		scale_colour_manual(
+			values = poolColours
+		) +
+		labs(
+			title = "Ages of individuals in pooled samples",
+			subtitle = "Targeted Bisulfite Sequencing",
+			x = "Age /yrs"#,
+			#colour = "Age"
+		)
+
+ggsave(
+	SampleAgesPlotByPoolComb,
+	filename = paste0(params$graphics,"/SampleAgesPlotByPoolComb.png"),
+	width = 6, height = 4.5
+)
+
+SampleAgesPlotByPoolComb
+```
+
+```{r}
+#options(knitr.table.format = "html")#"latex"
+poolSummaryTable <- 
+sampleMetaData %>% 
+	group_by(pool) %>% 
+	dplyr::summarise(
+		`Mean Age` = mean(age),Sex = sex[1],
+		`Min Age` = min(age), `Max Age` = max(age), n = n()
+	) %>%
+	dplyr::rename(Pool = pool) %>%
+	#mutate_if(is.numeric,sprintf("%g.2",.)) %>%
+	mutate(
+		Pool = cell_spec(
+			Pool, "html",
+			color = "Black",
+			align = "c",# angle = 45,
+			background = poolColours[Pool]
+		)
+	) %>%
+	kable(
+		digits = 2,
+		format = "html", escape = FALSE
+	) %>%
+	kable_styling(bootstrap_options = "striped", full_width = FALSE) %>%#, fixed_thead = TRUE
+	row_spec(0, background = "lightgrey") %>%
+	column_spec(1, bold = TRUE, border_right = TRUE)# %>%
+	#multirow_spec(1:8, bold = TRUE, color = "white")
+
+poolSummaryTable %>% save_kable(paste0(params$graphics,"/poolSummaryTable.png"))
+poolSummaryTable #%>% as_image()
+```
+
+```{r, fig.width = 7, fig.height = 8}
+SampleAgesPlotByPoolDNAm <- 
+SampleAgesPlotByPool +
+			geom_vline(
+			data = poolAgeProperties,
+			aes(
+				xintercept = DNAmAge,
+				colour = "DNAm"
+			)#,
+			#show.legend = FALSE
+		)
+
+ggsave(
+	SampleAgesPlotByPoolDNAm,
+	filename =
+		paste0(params$graphics,"SampleAgesPlotByPoolDNAm.png"),
+	width = 6,
+	height = 8
+)
+
+SampleAgesPlotByPoolDNAm
+```
+
+```{r,fig.width = 6, fig.asp = 9/16}
+SampleAgesPlotByPoolDNAmComb <- 
+SampleAgesPlotByPoolComb + 
+	geom_vline(
+	data = poolAgeProperties,
+		aes(
+			xintercept = DNAmAge,
+			colour = pool#"DNAm Age"
+		),
+		linetype = "dashed",
+		show.legend = FALSE
+	) + 
+	labs(caption = "Dashed Lines: Horvath 2013 DNAm Age, Solid Lines: Chronolocical age")
+
+ggsave(
+	SampleAgesPlotByPoolDNAmComb,
+	filename = paste0(params$graphics,"/SampleAgesPlotByPoolDNAmComb.png"),
+	width = 6, height = 4.5
+)
+
+SampleAgesPlotByPoolDNAmComb
+```
+
+---
+
+## Get Methylation data
+
+__Sequencing Data to be released...__
+
+```{r}
+Targetedfiles <- 
+list.files(
+	path = paste0(params$alignmentOut,"/methCallsTargeted"),
+	full.names = TRUE,
+	recursive = TRUE,
+	pattern = "Pool-\\d-\\w-GC-CB-\\d+_S\\d+_L\\d{3}.*_pe\\.bismark\\.cov\\.gz"
+)
+
+WGfiles <- 
+list.files(
+	path = paste0(params$alignmentOut,"/methCalls"),
+	full.names = TRUE,
+	recursive = TRUE,
+	pattern = "Pool-\\d-\\w-GC-CB-\\d+_S\\d+_L\\d{3}.*_pe\\.bismark\\.cov\\.gz"
+)
+```
+
+```{r}
+dir.create(
+	paste0(params$data, "bismarkCov/Targeted"),
+	recursive = TRUE, showWarnings = FALSE
+)
+dir.create(
+	paste0(params$data, "bismarkCov/WholeGenome"),
+	recursive = TRUE, showWarnings = FALSE
+)
+
+reformatTargetedCoverageFile <- function(file,dest) {
+	# create new filenames
+	## set new output directory
+	newFile <- gsub(file, pattern = '.*\\/', replacement = dest)#"../data/bismarkCov/"
+	## remove gz extention 
+	newFile <- gsub(newFile, pattern = "\\.gz$", replacement = "")
+	# read original (gzipped) bismark coverage file
+	read_tsv(
+		file,
+		col_names = c("pos", "rStart", "rEnd", "meth", "NMeth", "NunMeth"),
+		col_types = cols(
+			pos = col_character(),
+			rStart = col_double(),
+			rEnd = col_double(),
+			meth = col_double(),
+			NMeth = col_double(),
+			NunMeth = col_double()
+		)
+	) %>% 
+		# process the 'chromosome' column,
+		# here representing the targeted region into its component parts
+		extract(
+			pos,
+			into = c("region", "chr", "cStart", "cEnd"),
+			regex = "(.+)::(\\w+):(\\d+)-(\\d+)"
+		) %>%
+		# compute actual chromosomal coordinates from targeted region (above)
+		# and regional start/end positions
+		mutate(
+			start = as.numeric(cStart) + rStart,
+			end = as.numeric(cStart) + rEnd # rEnd # end
+		) %>%
+		## NB - if a site appears in the coverage file more than once
+		# due to overlap in the mapping space of the different amplicons
+		# the sum of its reads are taken and the meth value computed from these
+		# new totals
+		group_by(chr,start,end) %>%
+		dplyr::summarise(
+			NMeth = sum(NMeth),
+			NunMeth = sum(NunMeth),
+			meth = (NMeth/(NMeth + NunMeth)) * 100
+		) %>%
+		##
+		# select columns for bismark coverage format
+		dplyr::select(chr, start, end, meth, NMeth, NunMeth) %>%
+		# Write new file:
+		write_tsv(path = newFile, col_names = FALSE, quote_escape = FALSE)
+	# return new filenames
+	return(newFile)
+}
+```
+
+```{r}
+Targetednewfiles <- sapply(
+	Targetedfiles, reformatTargetedCoverageFile,
+	dest = paste0(params$data, "bismarkCov/Targeted/")
+)
+
+WGnewfiles <- sapply(
+	WGfiles, function(file) {
+		dest = paste0(params$data, "bismarkCov/WholeGenome/")
+		file.copy(
+			from = file,
+			to=dest
+		)
+		newFile <- gsub(file, pattern = '.*\\/', replacement = dest)#"../data/bismarkCov/"
+		## remove gz extention 
+		#newFile <- gsub(newFile,pattern = "\\.gz$",replacement = "")
+		return(newFile)
+	}
+)
+```
+
+```{r}
+readReformattedFiles <- function(files, name) {
+	lapply(
+		files, function(file){
+			read_delim(
+				file,
+				delim = "\t",
+				col_types = "ciidii",#c
+				col_names = c(
+					"chr", "start", "end", "meth", "Nmeth", "Nunmeth"#, "sampleName"
+				)
+			) %>% 
+			mutate(
+				sampleName = gsub(
+					file,
+					pattern = ".*(Pool-\\d-\\w-GC-CB-\\d+_S\\d+_L\\d{3}).*",
+					replacement = "\\1"
+				)
+			)
+		}
+	) %>% 
+		bind_rows() %>% 
+		mutate(coverage= Nmeth + Nunmeth) %>% # get coverage
+		extract(
+			sampleName,
+			into = c("pool", "rept", "batch", "sampleID", "Lnum") ,
+			regex = "(Pool-\\d)-(\\w)-GC-CB-(\\d+)_(S\\d+)_(L\\d+)",
+			remove = FALSE
+		) %>%
+		mutate(pool = gsub(pool, pattern = "-", replacement = " ")) %>%
+		mutate(alignment = name)
+}
+
+```
+
+```{r}
+aggMethData <- 
+bind_rows(
+	readReformattedFiles(Targetednewfiles, "Targeted"),
+	readReformattedFiles(WGnewfiles, "WholeGenome")
+)
+```
+
+### Associating mean age by pool with methylation data
+
+```{r}
+#,eval=FALSE,include=FALSE
+aggMethData %>% nrow()
+
+aggMethData <- left_join(
+	meanAgeByPool,
+	aggMethData,
+	by="pool"
+) %>% 
+	arrange(chr,start,end) #%>%
+	#mutate(start=start-1)
+
+aggMethData %>% nrow()
+```
+
+### Associating tRNA gene information with methylation data
+
+```{r}
+#,eval=FALSE,include=FALSE
+aggMethData %>% nrow()
+aggMethData <- left_join( # inner
+	aggMethData %>% unite(chr, start, end, sep = "-", col = "pos"),
+	tRNACpGs %>% mutate(start = start + 1) %>% 
+		unite(chr, start, end, sep = "-", col = "pos"),
+	by="pos"
+) %>%
+	separate(
+		col = pos,
+		into = c("chr", "start", "end"),
+		sep = "-"
+	) %>%
+	extract(
+		tRNAname,
+		c("nmt", "aa", "codon"),
+		"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-",
+		remove = FALSE
+	) %>%
+	mutate(tRNAname = as.character(tRNAname))
+aggMethData %>% nrow()
+```
+
+### Associating tRNA gene / methylation data with previously identified tRNAs & wether they were targeted
+
+```{r}
+aggMethData <- 
+aggMethData %>% 
+	mutate(tRNAge = tRNAname %in% tRNAgeVec) %>%
+	mutate(
+		Targeted = case_when(
+				tRNAname %in% tRNAsTargeted$tRNAname ~ TRUE,
+				is.na(tRNAname) ~ NA,
+				TRUE ~ FALSE
+			)
+		)
+```
+
+## Removing samples from batch1 run that were bad and rerun in batch2
+
+```{r}
+batch1tRNAs <- aggMethData %>% filter(batch == "7770") %>% 
+	distinct(tRNAname) %>% pull()
+
+batch2tRNAs <- aggMethData %>% filter(batch == "8204") %>% 
+	distinct(tRNAname) %>% pull()
+
+repeats <- batch2tRNAs[batch2tRNAs %in% batch1tRNAs] %>% 
+	na.omit() %>% as.character()
+```
+
+```{r}
+aggMethData <- 
+aggMethData %>% 
+ 	filter(!(batch == "7770" & tRNAname %in% repeats))
+
+aggMethData %>% nrow()
+```
+
+## QC filter - too few reads in multiQC report
+
+```{r}
+aggMethData <- 
+aggMethData %>% 
+	filter(!(batch == "7770" & sampleID == "S15"))
+
+aggMethData %>% nrow()
+```
+
+```{r}
+# write.table(
+# 	aggMethData,
+# 	file = paste0(params$data, "/combined-aggMethData.tab"),
+# 	quote = FALSE,
+# 	col.names = TRUE,
+# 	row.names = FALSE,
+# 	sep = "\t"
+# )
+saveRDS(aggMethData, file = paste0(params$data, "/combined-aggMethData.Rds"))
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References
+

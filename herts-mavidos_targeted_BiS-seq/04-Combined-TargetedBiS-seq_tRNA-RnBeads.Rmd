@@ -1,0 +1,325 @@
+---
+title: "tRNA gene methylation and age (Targeted BS-seq) - Rnbeads"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+# runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+bibliography: "`r normalizePath(params$bibliography)`"
+params:
+  bibliography: "../library.bib"
+---
+
+# Set-up
+
+## Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(RnBeads)
+	library(plotly)
+})
+```
+
+```{r}
+dir.create("out/rnbOut/", recursive = TRUE, showWarnings = FALSE)
+```
+
+## Data Prep for reading by RnBeads
+
+```{r}
+files <- list.files(
+	path = "/home/richardjamesacton/mounted/scratch/tRNA/targetedBSseq/src/run_7299205/methCallsTargeted/",#7197466
+	recursive = TRUE,
+	full.names = TRUE,
+	pattern = ".*_pe\\.bismark\\.cov\\.gz$"
+)
+```
+
+```{r}
+dir.create("data/bismarkCov/",recursive = TRUE,showWarnings = FALSE)
+reformatTargetedCoverageFile <- function(file) {
+	# create new filenames
+	## set new output directory
+	newFile <- gsub(file,pattern = '.*\\/',replacement = "data/bismarkCov/")
+	## remove gz extention 
+	newFile <- gsub(newFile,pattern = "\\.gz$",replacement = "")
+	# read original (gzipped) bismark coverage file
+	read_tsv(
+		file,
+		col_names = c("pos","rStart","rEnd","meth","NMeth","NunMeth"),
+		col_types = cols(
+			pos = col_character(),
+			rStart = col_double(),
+			rEnd = col_double(),
+			meth = col_double(),
+			NMeth = col_double(),
+			NunMeth = col_double()
+		)
+	) %>% 
+		# process the 'chromosome' column,
+		# here representing the targeted region into its component parts
+		extract(
+			pos,
+			into = c("region","chr","cStart","cEnd"),
+			regex = "(.+)::(\\w+):(\\d+)-(\\d+)"
+		) %>%
+		# compute actual chromosomal coordinates from targeted region (above)
+		# and regional start/end positions
+		mutate(
+			start = as.numeric(cStart) + rStart,
+			end = as.numeric(cStart) + rEnd # rEnd # end
+		) %>%
+		## NB - if a site appears in the coverage file more than once
+		# due to overlap in the mapping space of the different amplicons
+		# the sum of its reads are taken and the meth value computed from these
+		# new totals
+		group_by(chr,start,end) %>%
+		dplyr::summarise(
+			NMeth = sum(NMeth),
+			NunMeth = sum(NunMeth),
+			meth = NMeth/(NMeth + NunMeth)
+		) %>%
+		##
+		# select columns for bismark coverage format
+		dplyr::select(chr,start,end,meth,NMeth,NunMeth) %>%
+		# Write new file:
+		write_tsv(path = newFile,col_names = FALSE, quote_escape = FALSE)
+	# return new filenames
+	return(newFile)
+}
+
+newfiles <- sapply(files, reformatTargetedCoverageFile)
+```
+
+NB errors arise from CpGs overlapped by multiple amplicons / mapping regions - resulting in the 
+same location appearing more than once in a given sample with conflicting values. this is addressed
+in the above file conversion function see comments. 
+
+```{r}
+#newfiles
+fileDetails <- 
+enframe(newfiles, name = "index", value = "filename") %>%
+	extract(
+		filename,
+		into = c("pool", "repeat", "sample", "Lnum"),
+		#regex = "(Pool-\\d+)-(\\w+)-.*_(S\\d+)_(L\\d+)_.*\\.cov$",#\\.gz
+		regex = "(Pool-\\d+)-(\\w+)-.*-(\\d+_S\\d+)_(L\\d+)_.*\\.cov$",#\\.gz
+		remove = FALSE
+	) %>%
+	dplyr::select(-index) %>%
+	mutate(pool = gsub(pool,pattern = "-",replacement = " "))
+fileDetails
+```
+
+# QC filter
+
+```{r}
+fileDetails <- 
+fileDetails %>% 
+	filter(sample != "7770_S15")
+```
+
+
+```{r}
+samplesheetAgeCC <- read_tsv(file = "data/samplesheetCellCounts2.tab") %>%
+	dplyr::select(
+		-Sample_Well,-Sample_Group,-Pool_ID,-Array,-Slide,-Basename,-Sample_Plate,
+		pool = Sample_Name
+	)
+samplesheetAgeCC
+```
+
+```{r}
+samplesheet <- left_join(
+	fileDetails,
+	samplesheetAgeCC,
+	by = c("pool")
+) %>% left_join(.,
+	data.frame(
+		"age" = samplesheetAgeCC$age %>% unique(),
+		"ageBand" = #samplesheetAgeCC$age %>% unique() %>% sprintf("%.2g",.)
+		c("4", "4", "28", "28", "78", "78", "63", "63")
+	),
+	by = "age"
+) %>% as.data.frame()
+```
+
+```{r}
+samplesheet %>% write_tsv("out/rnbOut/combined-samplesheet.tsv")
+```
+
+# Rnbeads
+
+## Options
+
+```{r globalRNBopts}
+rnb.options(
+	assembly = "hg19",
+	differential.comparison.columns = "ageBand",
+	differential.comparison.columns.all.pairwise = "ageBand"
+	#columns.pairing = c("treatment"="side"), # e.g. for paired design
+	#covariate.adjustment.columns = NULL
+)
+```
+
+## tRNA regions
+
+```{r}
+tRNAs <- 
+read_tsv(
+	"../tRNA-GtRNAdb/hg19-tRNAs-SeqStrPseu.bed",
+	col_names = c(
+		"chromosome", "start", "end", "name","score","tStrand","thickStart",
+		"thickEnd","rgb","Nexon","xSarts","xEnds","pseudo","struct","seq"
+	)
+) 
+
+tRNAs %>%
+	dplyr::select(Chromosome = chromosome, Start = start, End = end, name) %>%
+	mutate(Start = as.integer(Start),End = as.integer(End)) %>%
+	as.data.frame() %>%
+	rnb.set.annotation(type = "tRNAs",regions = ., assembly="hg19")
+
+rnb.options(region.types=c(rnb.getOption("region.types"),"tRNAs"))
+```
+
+## RnBeads import
+
+```{r RnBeadsImport}
+outDir <- "out"
+rnbOut <- paste0(outDir,"/combined-rnbOut")
+unlink(rnbOut,recursive = TRUE)
+rnb.options(import.bed.style = "bismarkCov")
+
+dir.create(rnbOut,recursive = TRUE,showWarnings = FALSE)
+
+rnbAll <- rnb.run.import(
+	data.source = list(
+		bedDir = NULL,
+		samplesheet = samplesheet
+	),
+	dir.reports = rnbOut,
+	data.type = "bs.bed.dir"
+)
+```
+
+# Extract methylation and coverage data from RnBeads objects
+
+```{r aggMethCov}
+aggMethCovData <- 
+left_join(
+	# meth
+	bind_cols(
+		rnbAll$rnb.set %>% annotation(), # get positions
+		meth(rnbAll$rnb.set) %>% as.data.frame() # get methcalls
+	) %>% gather(
+		filename, meth, -Chromosome, -Start, -End, -Strand, -CpG, -GC, 
+		-`CGI Relation`, -SNPs, -HumanMethylation27, -HumanMethylation450, 
+		-MethylationEPIC
+	),
+	#covg
+	bind_cols(
+		rnbAll$rnb.set %>% annotation(), # get positions
+		covg(rnbAll$rnb.set) %>% as.data.frame()# get coverage
+	) %>% gather(
+		filename, coverage, -Chromosome, -Start, -End, -Strand, -CpG, -GC,
+		-`CGI Relation`, -SNPs, -HumanMethylation27, -HumanMethylation450,
+		-MethylationEPIC
+	),
+	
+	by = c(
+		"Chromosome", "Start", "End", "Strand", "CpG", "GC", "CGI Relation",
+		"SNPs", "filename","HumanMethylation27","HumanMethylation450",
+		"MethylationEPIC"
+	)
+) %>%
+	left_join(., samplesheet, by = "filename") %>% # connect with sample data
+	dplyr::rename(chr = Chromosome, start = Start, end = End)
+
+
+```
+
+## Get tRNA annotation
+
+```{r aggMethCovAmp}
+# save methylation and coverage data
+aggMethCovData %>% 
+	write_tsv(path = paste0(rnbOut,"/aggMethCovData.bed"),col_names = FALSE)
+
+# Intersect tRNAs with combined metylation and coverage data
+system(
+	command = paste0(
+		"bedtools intersect -wa -wb -a ",
+		paste0(rnbOut,"/aggMethCovData.bed "),
+		#"-b ../tRNA-GtRNAdb/hg19-tRNAs-100bp53-SeqStrPseu.bed > ", ##!! NB using flank
+		"-b ../tRNA-GtRNAdb/hg19-tRNAs-SeqStrPseu.bed > ", ##!! NB not using flank
+		paste0(rnbOut,"/aggMethCovData_amp.bed")
+	)#,	intern = TRUE # debug
+)
+
+aggMethCovDataAnno <- 
+read_tsv(
+	file = paste0(rnbOut,"/aggMethCovData_amp.bed"),
+	col_names = c(
+		colnames(aggMethCovData),
+		"tChr", "tStart", "tEnd", "tRNAname", "score", "tStrand", "thickStart",
+		"thickEnd", "rgb", "Nexon", "xSarts", "xEnds", "pseudo", "struct", "seq"
+	)
+) %>% 
+	#dplyr::select(-aChr,-aStart, -aEnd, -SNPs, -CpG, -GC, -`CGI Relation`) %>% 
+	# get tRNA category info
+	extract(
+		tRNAname,
+		c("nmt","aa","codon"),
+		"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-",
+		remove = FALSE
+	) 
+```
+
+## Coverage and Methylation density plots
+
+```{r densityPlots}
+densityPlot <- function (var){
+	var <- ensym(var)
+	(aggMethCovDataAnno %>%
+		dplyr::select(tRNAname,!! var) %>% na.omit() %>%
+		ggplot(aes(!! var,colour = tRNAname)) + 
+			geom_density(
+				show.legend = FALSE
+			)
+		) %>% ggplotly(dynamicTicks = TRUE)
+}
+densityPlot(meth)
+densityPlot(coverage)
+```
+
+# Save Data
+
+```{r}
+saveRDS(aggMethCovDataAnno, file = "out/rnbOut/aggMethCovDataAnno.Rds")
+saveRDS(rnbAll,file = "out/rnbOut/rnbAll.Rds")
+save.rnb.set(rnbAll$rnb.set, path = "out/rnbOut/rnbAll.Rds")
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References
+

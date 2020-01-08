@@ -1,0 +1,191 @@
+---
+title: "simple CpGd permutation analysis"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+#runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+  nPerm: 10
+  phdPath: "/scratch/rja1e16/PhD_git/"
+  features: "../tRNA-GtRNAdb/hg19-tRNAs_5col.bed"
+  modelData: "Projects/tRNA_Stuff/EpiTwin/data/data_gitIg/BloodBatchCpGd3001_blacklistFilteredDukeDAC.Rds"
+  threshold: 45
+  out: "out/out_gitIg/tRNA_CpGd_perm_t45_N10.Rds"
+  plan: "plan(list(sequential,tweak(multiprocess,workers = 2)))"
+---
+
+# Introduction
+
+Simple SpG density matching with pooling above and given density threshold
+
+(NB threshold is specified in number of CpGs per 500bp window)
+
+# Set-up
+
+## Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(plyranges)
+	library(furrr)
+	library(future.batchtools)
+})
+```
+
+## Env
+
+```{r plan}
+eval(parse(text = params$plan))
+```
+
+# Data Read-in
+
+## Model Data
+
+```{r wins}
+windows <- readRDS(
+	glue::glue("{params$phdPath}{params$modelData}")
+)
+```
+
+## Features
+
+```{r loci}
+loci <- read_tsv(
+	glue::glue("{params$phdPath}{params$features}"),
+	col_names = c("seqnames","start","end","name","strand"),
+	col_types = "ciicc"
+) %>% plyranges::as_granges()
+
+length(loci)
+
+loci <- GenomeInfoDb::keepSeqlevels(
+	loci,
+	paste0("chr",1:22), pruning.mode = "coarse"
+)
+```
+
+# Functions
+
+```{r getFreqTab}
+getFreqTab <- function(loci, threshold) {
+	expCpGd <- mcols(loci)$nCpG
+	expCpGd[expCpGd >= threshold] <- threshold
+	CpGdFreqTab <- expCpGd %>% table() %>% enframe("nCpG","count")
+	CpGdFreqTab
+}
+```
+
+```{r groupThresholdWins}
+groupThresholdWins <- function(wins, threshold) {
+	nms <- wins %>% names() %>% as.numeric()
+
+	grpnms <- nms[nms >= threshold] %>% as.character()
+	grp <- wins[grpnms] %>% Reduce("c", .)
+
+	othernms <- nms[nms < threshold] %>% as.character()
+	other <- wins[othernms]
+
+	other[[as.character(threshold)]] <- grp
+	return(other)
+}
+```
+
+```{r getSamplableWindows}
+getSamplableWindows <- function(wins, lociWins, threshold){
+	samplableWindows <- plyranges::filter_by_non_overlaps(
+		windows, lociWins, minoverlap = 500L
+	)
+	samplableWindowsSplit <- split(samplableWindows, samplableWindows$nCpG)
+	groupThresholdWins(samplableWindowsSplit, threshold)
+}
+```
+
+
+```{r getExactCpGd}
+getExactCpGd <- function(wins, CpGd, N) {
+	wins[[as.character(CpGd)]] %>% sample(N)	
+}
+```
+
+```{r sampler} 
+sampler <- function(wins, freqTab) {
+	Matches <- 
+	furrr::future_map2(
+		freqTab$nCpG, freqTab$count,
+		getExactCpGd, wins = wins
+	)
+	Reduce(f = "c", x = Matches)
+}
+```
+
+```{r}
+permuter <- function(wins, freqTab, N) {
+	furrr::future_map(
+		seq_along(1:N),
+		~sampler(wins = wins, freqTab = freqTab)
+	)
+}
+```
+
+```{r permuteWrapper}
+permuteWrapper <- function(windows, loci, threshold, N) {
+	lociWins <- plyranges::find_overlaps(windows, loci)
+	CpGdFreqTab <- getFreqTab(lociWins, threshold)
+	samplableWindows <- getSamplableWindows(windows, lociWins, threshold)
+	permRes <- permuter(samplableWindows, CpGdFreqTab, N)
+	list(
+		lociWins = lociWins,
+		CpGdFreqTab = CpGdFreqTab,
+		permRes = permRes
+	)
+}
+```
+
+# Run
+
+```{r run}
+result %<-% permuteWrapper(windows, loci, params$threshold, params$nPerm)
+```
+
+```{r save}
+saveRDS(
+	result,
+	glue::glue("{params$phdPath}{params$out}")
+)
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>
+

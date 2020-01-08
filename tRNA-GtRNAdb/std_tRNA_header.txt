@@ -1,0 +1,1 @@
+tChr	tStart	tEnd	tRNAname	score	strand	thickStart	thickEnd	RGB	blockCount	blockSizes	blockStarts

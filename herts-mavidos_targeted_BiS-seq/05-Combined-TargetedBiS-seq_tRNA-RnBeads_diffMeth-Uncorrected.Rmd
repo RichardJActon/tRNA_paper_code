@@ -1,0 +1,411 @@
+---
+title: "tRNA gene methylation and age (Targeted BS-seq) - Rnbeads"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+# runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+bibliography: "`r normalizePath(params$bibliography)`"
+params:
+  bibliography: "../library.bib"
+---
+
+# Set-up
+
+This is a sentance
+
+## Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(RnBeads)
+	library(ggsignif)
+})
+```
+
+## Data Read-in
+
+```{r}
+aggMethCovDataAnno <- readRDS(file = "out/rnbOut/aggMethCovDataAnno.Rds")
+#rnbAll <- readRDS(file = "out/rnbOut/rnbAll.Rds")
+rnbAll <- load.rnb.set(path = "out/rnbOut/rnbAll.Rds.zip")
+```
+
+
+```{r}
+#samplesheet <- read_tsv("../out/rnbOut/samplesheet.tsv")
+```
+
+## tRNA regions
+
+```{r}
+tRNAs <-
+read_tsv(
+	"../tRNA-GtRNAdb/hg19-tRNAs-SeqStrPseu.bed",
+	col_names = c(
+		"chromosome", "start", "end", "name","score","tStrand","thickStart",
+		"thickEnd","rgb","Nexon","xSarts","xEnds","pseudo","struct","seq"
+	)
+)
+
+tRNAs %>%
+	dplyr::select(Chromosome = chromosome, Start = start, End = end, name) %>%
+	mutate(Start = as.integer(Start),End = as.integer(End)) %>%
+	as.data.frame() %>%
+	rnb.set.annotation(type = "tRNAs",regions = ., assembly="hg19")
+
+rnb.options(region.types=c(rnb.getOption("region.types"),"tRNAs"))
+```
+
+```{r}
+tRNAsTargeted <-
+read_tsv("out/tRNAsInTargetedBisSeq_tRNAge.tsv")
+```
+
+```{r}
+aggMethCovDataAnno <- 
+aggMethCovDataAnno %>% 
+	mutate(
+		tRNAge = tRNAname %in% (
+			tRNAsTargeted %>% filter(tRNAge == TRUE) %>% pull(tRNAname)
+		)
+	)
+```
+
+# fxn
+
+## Plotting functions
+
+```{r}
+source("./tRNAMethCovPlotter.R")
+```
+
+
+```{r}
+getDiffMethRes <- function(rnbSetObj, rnbDiffMethObj, region = "sites") {
+	bind_rows(
+		sapply(
+			get.comparisons(rnbDiffMethObj),
+			USE.NAMES = TRUE,
+			simplify = FALSE,
+			function(cmp){
+				diffMethRes <- 
+				bind_cols(
+					#rnbAll$rnb.set
+					annotation(rnbSetObj,type = region),
+					get.table(
+						rnbDiffMethObj,
+						cmp,
+						region,
+						return.data.frame = TRUE
+					)
+				) %>% 
+					#arrange(diffmeth.p.val) %>%
+					dplyr::rename(
+						chr = Chromosome, start = Start, end = End#,
+						#pvalue = diffmeth.p.val, meth.diff = mean.diff
+					) %>% mutate(comparison = cmp)
+			}
+		)
+	)
+}
+```
+
+# Differential methylation analyses
+
+testing for differential methylation
+
+## Uncorrected pairwise tests by site and tRNA
+
+```{r diffMeth}
+rnbAllDiffMeth <- rnb.execute.computeDiffMeth(
+	x = rnbAll,#$rnb.set,
+	pheno.cols.all.pairwise = "ageBand",
+	#covariate.adjustment.columns
+	columns.adj = NULL,
+	pheno.cols = "ageBand",
+	region.types = "tRNAs",#, disk.dump = FALSE,disk.dump.dir = "../out/rnbOut/"
+	covg.thres = 25
+)
+
+rnbAllDiffMeth@site.test.method
+```
+
+```{r}
+saveRDS(rnbAllDiffMeth,"out/combined-rnbAllDiffMeth_CTC.Rds")
+```
+
+```{r,eval=FALSE}
+rnbAllDiffMeth <- readRDS("out/combined-rnbAllDiffMeth_CTC.Rds")
+```
+
+
+## Results by tRNA
+
+Getting positional information for differential methyltion calls
+
+```{r}
+diffMethRestRNA <- 
+getDiffMethRes(
+	rnbSetObj = rnbAll,#$rnb.set,
+	rnbDiffMethObj = rnbAllDiffMeth,
+	region = "tRNAs"
+)
+#diffMethRestRNA
+```
+
+```{r}
+get.comparisons(rnbAllDiffMeth)
+```
+
+NB direction is inverted all but the 28 vs 4 comparison - so it is flipped here
+
+```{r}
+diffMethRestRNA <-
+diffMethRestRNA %>% 
+	mutate(
+		mean.mean.diff = if_else(
+			comparison == "28 vs. 4 (based on ageBand)",
+			mean.mean.diff,
+			mean.mean.diff * -1
+		)
+	)
+```
+
+```{r}
+diffMethRestRNA %>%
+	write_tsv(path = "out/rnbOut/combined-diffMethRestRNA.tsv")
+```
+
+### tRNAs with significant differences between age groups
+
+```{r}
+# tRNAs with significant increases between older and younger pairs
+# NB direction of comparisons can differ : 28 vs 4 (-ve) is increase with age
+nomSigIncrease <- 
+diffMethRestRNA %>%
+	group_by(comparison) %>%
+	#filter(if_else(comparison == "28 vs. 4 (based on ageBand)",mean.mean.diff > 0,mean.mean.diff < 0)) %>%
+	filter(mean.mean.diff > 0) %>%
+	dplyr::select(comparison,name, comb.p.val, comb.p.adj.fdr, mean.mean.diff, chr, start, end) %>%
+	#filter(comb.p.adj.fdr < 0.05) %>%
+	filter(comb.p.val < 0.05) %>% 
+	arrange(comb.p.val) %>%
+	dplyr::rename(tRNAname = name) %>%
+	left_join(
+		.,
+		tRNAsTargeted %>% dplyr::select(tRNAname,tRNAge),
+		by = "tRNAname"
+	)
+nomSigIncrease
+```
+
+number of comparisons in which there was an increase
+
+```{r}
+nomSigIncrease %>% 
+	group_by(tRNAname) %>%
+	dplyr::summarise(n = n()) %>%
+	arrange(desc(n)) %>%
+	left_join(
+		.,
+		tRNAsTargeted %>% dplyr::select(tRNAname,tRNAge),
+		by = "tRNAname"
+	)
+```
+
+```{r}
+# tRNAs with significant increases between older and younger pairs
+# NB direction of comparisons can differ : 28 vs 4 (-ve) is increase with age
+nomSigDecrease <- 
+diffMethRestRNA %>%
+	group_by(comparison) %>%
+	#filter(if_else(comparison == "28 vs. 4 (based on ageBand)",mean.mean.diff < 0,mean.mean.diff > 0)) %>%
+	filter(mean.mean.diff < 0) %>%
+	dplyr::select(name, comb.p.val, comb.p.adj.fdr, mean.mean.diff, chr, start, end) %>%
+	#filter(comb.p.adj.fdr < 0.05) %>%
+	filter(comb.p.val < 0.05) %>% 
+	arrange(comb.p.val) %>%
+	dplyr::rename(tRNAname = name) %>%
+	left_join(
+		.,
+		tRNAsTargeted %>% dplyr::select(tRNAname,tRNAge),
+		by = "tRNAname"
+	)
+nomSigDecrease
+```
+
+number of comparisons in which there was an increase
+
+```{r}
+nomSigDecrease %>% 
+	group_by(tRNAname) %>%
+	dplyr::summarise(n = n()) %>%
+	arrange(desc(n))%>%
+	left_join(
+		.,
+		tRNAsTargeted %>% dplyr::select(tRNAname,tRNAge),
+		by = "tRNAname"
+	)
+```
+
+### Plotting
+
+#### Proccess data for plotting
+
+```{r}
+# columns required for plotter
+cols <- c(
+	#"type", "values",
+	"tRNAname", "tRNAge", "ageBand", "age",
+	"tStrand", "chr", "tStart", "tEnd", "pseudo"
+)
+```
+
+```{r}
+### !!! mean of repts - meth
+plotDataBytRNA <- 
+aggMethCovDataAnno %>% 
+	dplyr::select(
+		tRNAname, tRNAge, ageBand, age, tStrand, chr, tStart, tEnd, pseudo,
+		chr, start, pool, meth, coverage,CpG,`repeat`
+	) %>%
+	# meth and coverage into a single column for facet wrapping
+	group_by(
+		tRNAname, tRNAge, ageBand, age,
+		tStrand, chr, tStart, tEnd, pseudo, chr, start, pool#, `repeat`
+	) %>%
+	gather(key = type, value = values,meth,coverage) %>%
+	# get meth values only for averaging
+	filter(type == "meth") %>%
+	# add type column to grouping so that it is preserved after the summarise
+	group_by(type, add = TRUE) %>%
+	# take the mean of the methylation at each CpG by technical replicate
+	dplyr::summarise(
+		values = mean(values,na.rm = TRUE)#,
+	) %>%
+	ungroup() %>%
+	# covnvert to percentage
+	mutate(values = values * 100) %>%
+	# select only columns required for plotting
+	dplyr::select(one_of(cols,"type","values")) %>%
+	# Add back coverage information
+	# this need not be averaged by repeat as coverage reflects technical variation
+	mutate(sd = 0) %>% #as.numeric(NA)
+	bind_rows(
+		.,
+		aggMethCovDataAnno %>%
+			mutate(batch = gsub(sample,pattern = "(\\d+)_S\\d+",replacement = "\\1")) %>%
+			group_by(
+				!!! syms(cols), start#CpG
+			) %>%
+			dplyr::summarise(
+				values = sum(coverage),
+				#values = median(coverage),
+
+			) %>%
+			arrange(tRNAname,age) %>%
+			group_by(!!! syms(cols)) %>%
+			dplyr::summarise(coverage = mean(values), sd = sd(values)) %>%
+			dplyr::rename(values = coverage) %>%
+			mutate(type = "coverage")
+		
+	) %>%
+	drop_na(values) %>%
+	# na.omit() %>%
+	# get only site associated with tRNAs targeted - no off target (low quality)
+	dplyr::filter(tRNAname %in% tRNAsTargeted$tRNAname)
+
+#diffMethRestRNA
+```
+
+missing data issues...
+
+```{r}
+tRNAsMissingAtimePoint <- 
+plotDataBytRNA %>% 
+	group_by(tRNAname,age,ageBand) %>% 
+	filter(type == "meth") %>% 
+	dplyr::summarise(n = n()) %>%
+	arrange(n) %>% 
+	group_by(tRNAname) %>% 
+	dplyr::summarise(n = n()) %>% 
+	arrange(n) %>% 
+	filter(n < 8)
+	#View()
+
+tRNAsMissingAtimePoint
+
+# plotDataBytRNA %>%
+# 	filter(
+# 		#type == "meth",
+# 		type == "coverage",
+# 		tRNAname == "tRNA-Met-CAT-4-1" # ctrl
+# 	) %>% pull(values) %>% qplot()
+# 
+# plotDataBytRNA %>%
+# 	filter(
+# 		type == "coverage",
+# 		tRNAname == "tRNA-Met-CAT-1-1" #problem
+# 	) %>% pull(values) %>% qplot()
+
+```
+
+```{r}
+suppressWarnings({
+	plots <- tRNAMethCovPlotter(
+		plotDataBytRNA %>% filter(!(tRNAname %in% "tRNA-Met-CAT-1-1")),
+		#tRNAs = "tRNA-iMet-CAT-1-4",
+		#tRNAs = "tRNA-Met-CAT-1-1",
+		#tRNAs = "tRNA-Val-CAC-7-1",
+		RnBeadsPairwiseComparisons = diffMethRestRNA
+		#RnBeadsPairwiseComparisons = (diffMethRestRNA %>% filter(name == "tRNA-iMet-CAT-1-4"))
+	)
+})
+
+#plots$plot
+```
+
+#### Plots
+
+```{r, fig.width = 7, fig.height = 6}
+nil <- plotPrinter(plots, coverageBoxProp = 0.25)
+```
+
+#### Saving plots
+
+```{r}
+suppressWarnings({
+	nil <- plotPrinter(
+		plots,
+		width = 7,
+		height = 6,
+		printNoSave = FALSE,
+		filePrefix = "combined-RnBeadsDiffMethCovAgeVioBoxMean",
+		coverageBoxProp = 0.25
+	)
+})
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>

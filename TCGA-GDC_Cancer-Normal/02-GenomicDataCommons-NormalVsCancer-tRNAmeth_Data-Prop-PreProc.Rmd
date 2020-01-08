@@ -1,0 +1,245 @@
+---
+title: "02 - GenomicDataCommons Normal Vs. Cancer tissue tRNA gene methylation - Data Properties and Pre-processing"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+bibliography: "`r normalizePath('../library.bib')`"
+---
+
+# Set-up
+
+## libs
+
+```{r}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(lubridate)
+	library(broom)
+	library(psych)
+})
+```
+
+```{r}
+nest <- nest_legacy
+unnest <- unnest_legacy
+```
+
+## Data Read-In
+
+## local data
+
+### Methylation Data
+
+```{r}
+dataTest <- readRDS(
+	file = "data/tRNAprobesNormCancerArrayPairs.Rds"
+)
+```
+
+### tRNA array probes
+
+```{r}
+tRNAprobes <- 
+read_delim(	
+	delim = "\t",
+	file = "../tRNA-GtRNAdb/450k_coresponding_hg19tRNAs.bed",
+	col_types = "ciicciiciciicccc",
+	col_names = c("pChr","pStart","pEnd","probeID",
+		as.character(
+			read_delim(
+				delim = "\t",
+				file = "../tRNA-GtRNAdb/std_tRNA_header.txt",
+				col_names = FALSE,
+				col_types = paste0(rep("c",12),collapse = "")
+			)
+		)
+	)
+)
+
+```
+
+### tRNAge gene set
+
+```{r}
+tRNAge <- read_delim(
+	delim = "\t",
+	 col_names = "tRNAname",
+	 col_types = "c",
+	 file = "../tRNA-GtRNAdb/GenWideSigWintRNAs.txt"
+) %>%
+	pull()
+```
+
+# Analysis
+
+```{r}
+tRNAmethCancerNormal <- dataTest %>% unnest() %>% as_tibble()
+tRNAmethCancerNormal$tRNAge <- tRNAmethCancerNormal$tRNAname %in% tRNAge
+tRNAmethCancerNormal %>% nrow()
+```
+
+seem to have got some additional sample types - filtering these out.
+
+```{r}
+tRNAmethCancerNormal <- tRNAmethCancerNormal %>%
+	dplyr::filter(sample_type %in% c("Solid Tissue Normal","Primary Tumor"))
+```
+
+## Removing probes with missing betas
+
+```{r}
+tRNAmethCancerNormal$Beta_value %>% length()
+which(is.na(tRNAmethCancerNormal$Beta_value)) %>% length()
+```
+
+```{r}
+tRNAmethCancerNormal$Beta_value %>% length() -
+which(is.na(tRNAmethCancerNormal$Beta_value)) %>% length()
+```
+
+```{r}
+tRNAmethCancerNormal <- tRNAmethCancerNormal %>% 
+	dplyr::filter(!is.na(Beta_value))
+```
+
+# Data Available by Cancer primary site
+
+```{r}
+tRNAmethCancerNormal %>% 
+	group_by(primary_site) %>% 
+	summarise(count=n()) %>%
+	arrange(count) %>%
+	mutate(primary_site = as.character(primary_site)) %>%
+	mutate(primary_site = factor(primary_site,levels = primary_site)) %>%
+	ggplot(aes(primary_site,count)) + 
+		geom_col() + 
+		theme(axis.text.x = element_text(angle = 0,vjust = 0)) +
+		geom_text(aes(label=count),hjust=-0.05) +
+		ylim(0,21200) + coord_flip() +
+		labs(y="Number of probes with data in this tissue")
+```
+
+# Overall cancer Vs. Normal betas comparison
+
+```{r}
+tRNAmethCancerNormal %>%
+	ggplot(aes(sample_type,Beta_value)) + 
+		geom_jitter(size = 0.01) +
+		geom_violin(aes(fill=sample_type),alpha=0.6,draw_quantiles = c(0.25,0.5,0.75))
+		
+```
+
+```{r}
+tRNAmethCancerNormal$sample_type <- tRNAmethCancerNormal$sample_type %>% as.character() %>% as.factor()
+wilcox.test(data=tRNAmethCancerNormal,Beta_value ~ sample_type )
+```
+
+
+```{r}
+cancerNormalMeanBetas <- tRNAmethCancerNormal %>%
+	group_by(sample_type) %>%
+	summarise(meanBeta=mean(Beta_value))
+cancerNormalMeanBetas
+```
+
+Primary tumor mean is `r (cancerNormalMeanBetas[[1,2]] - cancerNormalMeanBetas[[2,2]])*100`% more than Solid Tissue Normal mean.
+
+# DNAm change with age in cancer Vs Normal
+
+```{r}
+tRNAmethCancerNormal %>% 
+	ggplot(aes(age,Beta_value)) + 
+		geom_point(size=0.01) + 
+		geom_smooth(method = "lm") + 
+		facet_wrap(~sample_type)
+```
+
+```{r}
+cancerSamples <- tRNAmethCancerNormal %>% 
+	dplyr::filter(sample_type == "Primary Tumor")
+
+cancerModel <- lm(age ~ Beta_value,data=cancerSamples)
+cancerModel %>% summary
+```
+
+```{r}
+normalSamples <- tRNAmethCancerNormal %>% 
+	dplyr::filter(sample_type == "Solid Tissue Normal")
+
+normalModel <- lm(age ~ Beta_value,data=normalSamples)
+normalModel %>% summary
+```
+
+Significant increases in methylation in both cancer and normal tissues, more so in both significance and magnitude for cancer.
+
+```{r}
+# tackling test for differences in correlation...
+library(psych)
+r.test(
+	#r12=
+	cor(cancerSamples$age,cancerSamples$Beta_value),
+	#r23=cor(cancerSamples$Beta_value,normalSamples$Beta_value),
+	#r23=
+	cor(normalSamples$age,normalSamples$Beta_value),#r13
+	n = nrow(cancerSamples),
+	n2 = nrow(normalSamples)
+)
+cat("\n\n")
+
+paired.r(
+ 	xy=cor(cancerSamples$age,cancerSamples$Beta_value),
+	xz=cor(normalSamples$age,normalSamples$Beta_value),
+	n = nrow(cancerSamples),
+	n2 = nrow(normalSamples)
+)
+
+
+corr.test(x=cancerSamples$age,y=cancerSamples$Beta_value) 
+#corr.p()
+
+
+```
+
+```{r}
+cancerVsNormal <- inner_join(by=c("probeID","case_id"),
+	cancerSamples %>% dplyr::select(case_id,probeID,age,Beta_value),
+	normalSamples %>% dplyr::select(case_id,probeID,age,Beta_value)
+)
+
+r.test(
+	r12=cor(cancerVsNormal$age.x,cancerVsNormal$Beta_value.x),
+	r13=cor(cancerVsNormal$age.y,cancerVsNormal$Beta_value.y),
+	r23=cor(cancerVsNormal$Beta_value.x,cancerVsNormal$Beta_value.y),
+	n=nrow(cancerVsNormal)
+)
+```
+
+
+# Beta distributions by primary site
+
+```{r,fig.width=12,fig.height=6.75}
+tRNAmethCancerNormal %>%
+	ggplot(aes(Beta_value)) + 
+		geom_density(aes(fill=sample_type),alpha=0.6) + 
+		facet_wrap(~primary_site)
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References
+

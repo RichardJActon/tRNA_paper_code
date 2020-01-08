@@ -1,0 +1,688 @@
+---
+title: "tRNA only age models"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+    keep_md: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+#runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+  outDir: "out"
+---
+
+# Introduction
+
+# Set-up
+
+## Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(magrittr)
+	# library(furrr)
+	# library(future.apply)
+	# library(future.batchtools)
+	library(fst)
+})
+```
+
+## Env
+
+```{r setup}
+outDir <- normalizePath(params$outDir)
+```
+
+# Data Read-in
+
+```{r}
+gws <- 4.338717e-09
+```
+
+## Methylation data
+
+```{r}
+tRNAcols <- unlist(colnames(read_tsv(
+	"../tRNA-GtRNAdb/std_tRNA_header.txt",
+	col_types = cols(.default = col_character())
+)))
+
+meDIPseqCols <- unlist(colnames(read_tsv(
+	"metadata/chr_Combined_RED_rpm_bedheader.txt",
+	col_types = cols(.default = col_character())
+)))
+
+meDIPseqRPMtRNA <- read_tsv(
+	"data/tRNA-EpiTwins-RPM-raw.bed.gz",
+	col_names = c(tRNAcols,"inter",meDIPseqCols),
+	col_types = cols(
+		.default = col_double(),
+		tChr = col_character(),
+		tRNAname = col_character(),
+		strand = col_character(),
+		blockSizes = col_number(),
+		blockStarts = col_character(),
+		chromosome = col_character()
+	)
+) %>% 
+select(
+	-score,-thickStart,-thickEnd,-RGB,-blockCount,-blockSizes,-inter,
+	wChr = chromosome, wStart = start, wEnd = end
+)
+```
+
+## metadata
+
+```{r}
+metadata <- read_tsv(
+	"metadata/Extended_sample_data_new_ages.txt", ## !! Not Public
+	col_types = cols(
+		.default = col_double(),
+		BGIid = col_character(),
+		DOB = col_character(),
+		DateSampleSent = col_character(),
+		date_visit = col_character(),
+		Batch = col_character(),
+		SEX = col_character(),
+		ACTUAL_ZYGOSITY = col_character(),
+		Centre = col_character(),
+		SMOKING_STATUS = col_logical(),
+		database = col_character()
+	)
+) %>%
+	mutate(twin = gsub(KCLid,pattern = "\\d+(\\d$)", replacement = "\\1"))
+```
+
+```{r}
+metadata %>% colnames()
+```
+
+## Data shaping
+
+```{r}
+meDIPseqRPMtRNALongMeta <- 
+left_join(
+	meDIPseqRPMtRNA %>%
+		gather(key = BGIid, value = RPM, metadata$BGIid),
+	metadata %>% select(
+		BGIid,
+		KCLid, KCLfam, ageDNAextraction, Batch, SEX, ACTUAL_ZYGOSITY,
+		eosinophils, lymphocytes, monocytes, neutrophils, abs_blooddiff,
+		readcount
+	),
+	by = "BGIid"
+)
+
+rm(meDIPseqRPMtRNA)
+```
+
+```{r}
+write_fst(meDIPseqRPMtRNALongMeta,path = "./out/out_gitIg/meDIPseqRPMtRNALongMeta.fst")
+```
+
+```{r}
+meDIPseqRPMtRNALongMetaFST <- fst("./out/out_gitIg/meDIPseqRPMtRNALongMeta.fst")
+```
+
+```{r}
+tRNAwinLookup <- 
+meDIPseqRPMtRNALongMeta %>%
+	select(tChr:wEnd) %>%
+	distinct()
+```
+
+```{r}
+sws <- 0.05 / 598 # nrow(tRNAwinLookup)
+sws
+```
+
+# Functions
+
+## Filter funcs
+
+### unrelated
+
+```{r}
+unrelated <- function(df){
+	df %>%
+		arrange(KCLid) %>%
+		distinct(wChr,wStart,KCLfam,.keep_all = TRUE)
+}
+```
+
+```{r}
+unrelated1 <- function(df) {
+	BGIids <- 
+	metadata %>%
+		arrange(KCLid) %>%
+		filter(twin == "1") %>%
+		distinct(KCLid,.keep_all = TRUE) %>%
+		pull(BGIid)
+	
+	df %>%
+		filter(BGIid %in% BGIids)
+}
+
+unrelated2 <- function(df) {
+	BGIids <- 
+	metadata %>%
+		arrange(KCLid) %>%
+		filter(twin == "2") %>%
+		distinct(KCLid,.keep_all = TRUE) %>%
+		pull(BGIid)
+	
+	df %>%
+		filter(BGIid %in% BGIids)
+}
+```
+
+### twins
+
+```{r}
+MZ1 <- function(df){
+	BGIids <- 
+	metadata %>% 
+		tidyr::extract(
+			KCLid, into = "twin", regex = "(\\d$)", remove = FALSE, convert = TRUE
+		) %>% 
+		group_by(KCLfam) %>% 
+		filter(n() == 2, ACTUAL_ZYGOSITY == "MZ",twin == 1L) %>%
+		pull(BGIid)
+	
+	df %>%
+		filter(BGIid %in% BGIids)
+}
+
+MZ2 <- function(df){
+	BGIids <- 
+	metadata %>% 
+		tidyr::extract(
+			KCLid, into = "twin", regex = "(\\d$)", remove = FALSE, convert = TRUE
+		) %>% 
+		group_by(KCLfam) %>% 
+		filter(n() == 2, ACTUAL_ZYGOSITY == "MZ",twin == 2L) %>%
+		pull(BGIid)
+	
+	df %>%
+		filter(BGIid %in% BGIids)
+}
+
+DZ1 <- function(df){
+	BGIids <- 
+	metadata %>% 
+		tidyr::extract(
+			KCLid, into = "twin", regex = "(\\d$)", remove = FALSE, convert = TRUE
+		) %>% 
+		group_by(KCLfam) %>% 
+		filter(n() == 2, ACTUAL_ZYGOSITY == "DZ",twin == 1L) %>%
+		pull(BGIid)
+	
+	df %>%
+		filter(BGIid %in% BGIids)
+}
+
+DZ2 <- function(df){
+	BGIids <- 
+	metadata %>% 
+		tidyr::extract(
+			KCLid, into = "twin", regex = "(\\d$)", remove = FALSE, convert = TRUE
+		) %>% 
+		group_by(KCLfam) %>% 
+		filter(n() == 2, ACTUAL_ZYGOSITY == "DZ",twin == 2L) %>%
+		pull(BGIid)
+	
+	df %>%
+		filter(BGIid %in% BGIids)
+}
+
+```
+
+### longitudinals
+
+```{r}
+longs <- 
+metadata %>% 
+	# get indiviuals with more than one sample
+	group_by(KCLid) %>% 
+	filter(n() > 1) %>%
+	# get the youngest and oldest sample
+	filter(ageDNAextraction == min(ageDNAextraction) | ageDNAextraction == max(ageDNAextraction)) %>%
+	# pick one sample when their are ties for min and max
+	arrange(BGIid) %>%
+	distinct(KCLid, ageDNAextraction, .keep_all = TRUE) %>%
+	# remove samples with only one time point after tie removal
+	group_by(KCLid) %>% 
+	filter(n() > 1)  %>% 
+	# compute differences between min and max age
+	arrange(KCLid) %>% 
+	mutate(dif = abs(ageDNAextraction - lead(ageDNAextraction))) %>% 
+	select(BGIid, KCLid, ageDNAextraction, dif) %>%
+	# fill in differences to all samples
+	fill(dif) %>% 
+	# select only those samples with more than 5 yrs difference
+	filter(dif > 5) %>%
+	pull(BGIid)
+```
+
+```{r}
+longitudinals <- function(df) {
+	df %>%
+		filter(BGIid %in% longs) #trueLongMeta4yrPlus$BGIid
+}
+```
+
+### list
+
+```{r}
+filterFuncList <- list(
+	longitudinals = longitudinals,
+	unrelated = unrelated, unrelated1 = unrelated1, unrelated2 = unrelated2,
+	MZ1 = MZ1, MZ2 = MZ2, DZ1 = DZ1, DZ2 = DZ2
+)
+```
+
+```{r}
+# dfself <- function(df){df %>% filter()} # test identity filter
+```
+
+## Quantile Normalisation
+
+```{r}
+QnormMeth <- function(df) {
+	df %>%
+	group_by(wChr,wStart) %>%
+	mutate(methQNorm = qqnorm(RPM, plot.it = FALSE)$x) %>%
+	ungroup()
+}
+# meDIPseqRPMtRNALongMeta %>%
+# 	filter(tRNAname == "tRNA-iMet-CAT-1-4") %>%
+# 	QnormMeth()
+```
+
+## groupSummaryStats
+
+```{r}
+groupSummaryStats <- function(df,svar,...){
+	df %>%
+		group_by(...) %>%
+		summarise(
+			min = min({{ svar }}),
+			median = median({{ svar }}),
+			mean = mean({{ svar }}),
+			max = max({{ svar }}),
+			sd = sd({{ svar }}),
+			var = var({{ svar }}),
+			propZero = (length(which({{ svar }} == 0)) / n()),
+			n = n()
+		)
+}
+```
+
+## myGlance
+
+a la `broom::glance`
+
+```{r}
+myGlance <- function(model,...){
+	#vars <- ensyms(vars)
+	coefs <- summary(model)$coefficients %>% 
+		as_tibble(rownames = NA) %>% 
+		rownames_to_column("variable") %>%
+		rename(
+			estimate = Estimate,
+			stderr = `Std. Error`,
+			t_value = `t value`,
+			p_value = `Pr(>|t|)`
+		)
+	coefs %>%
+		filter(variable %in% ...)
+}
+```
+
+## Model names
+
+```{r}
+myModelerName <- function(
+	form, by = "window", dropMissing = TRUE, norm = TRUE,
+	prefix = NA
+) {
+	#form <- formula(form)
+	variables <- as.character(form)[-1] # check len 3
+	varnms <- variables[2] %>% 
+		str_split(simplify = FALSE,pattern = " \\+ ") %>% 
+		unlist()
+	
+	fname <- paste0(
+		ifelse(is.na(prefix),"",paste0(prefix,"_")),
+		gsub(
+			variables[1],
+			pattern = "[\\(\\)\\[\\]\\{\\}]",
+			replacement = "_",perl = TRUE
+		), "-by-",
+		paste0(varnms, collapse = "-"),
+		"_",by,
+		ifelse(dropMissing,"_drop",""),
+		ifelse(norm,"_norm",""),
+		".Rds"
+	)
+	
+	fname
+}
+```
+
+## model reader
+
+```{r}
+myModelerReader <- function(
+	form, by = "window", dropMissing = TRUE, norm = TRUE,
+	outDir = NULL, prefix = NA
+) {
+	if(is.null(outDir)){
+		outDir <- "./out/out_gitIg/models/"
+	}
+	
+	fname <- myModelerName(form,by,dropMissing,norm,prefix)
+	
+	readRDS(paste0(normalizePath(outDir),"/",fname))
+}
+```
+
+## modeler
+
+settings
+
+- window / tRNA
+- covars
+- only samples with covars
+- normalise
+- log age
+
+```{r}
+myModeler <- function(
+	dat,# = "./out/out_gitIg/meDIPseqRPMtRNALongMeta.fst",
+	form, by = "window", dropMissing = TRUE, norm = TRUE,
+	outDir = NULL, save = TRUE, filterFunc = NA, prefix = NA,
+	directReturn = FALSE
+){
+	dat <- read_fst(dat) %>% as_tibble()
+	# dat <- dat %>% 
+	# 	as.data.frame() %>%
+	# 	as_tibble()
+	
+	#,logAge = FALSE
+	grouper <- NULL
+	if(by == "window"){
+		grouper <- syms(c("wChr", "wStart", "wEnd", "tRNAname"))
+	} else if (by == "tRNA") {
+		grouper <- syms(c("tChr", "tStart", "tEnd", "tRNAname"))
+	} else {
+		stop(" by must be either 'window' or 'tRNA'")
+	}
+	form <- formula(form)
+	variables <- as.character(form)[-1] # check len 3
+	varnms <- variables[2] %>% 
+		str_split(simplify = FALSE, pattern = " \\+ ") %>% 
+		unlist()
+	#varnms <- variables[1]
+	
+	#warning(paste0("All Rows: ",nrow(dat),"\n"))
+	if(!is.na(filterFunc)){
+		#dat <- get(filterFunc)(dat)
+		dat <- filterFuncList[[filterFunc]](dat)
+	}
+	#warning(paste0("Filter Function Rows: ",nrow(dat),"\n"))
+	if(dropMissing == TRUE){
+		if(length(varnms[-1]) > 0) {
+			dat <- dat %>%
+				drop_na(c(varnms[-1]))
+		}
+	}
+	#warning(paste0("Rows after missing values dropped: ",nrow(dat),"\n"))
+	if(norm == TRUE){
+		dat <- dat %>%
+			QnormMeth()
+	}
+	
+	models <- 
+	dat %>%
+		group_by(!!!grouper) %>%
+		nest() %>%
+		mutate(model = map(data, ~lm(form, data = .x)))
+	
+	#warning(paste0("Models Rows: ",nrow(models),"\n"))
+	
+	if(is.null(outDir)){
+		outDir <- "./out/out_gitIg/models/"
+	}
+	
+	if(!dir.exists(outDir)){
+		dir.create(
+			normalizePath(outDir), recursive = TRUE, showWarnings = FALSE
+		)
+	}
+	
+	fname <- myModelerName(form,by,dropMissing,norm,prefix)
+	
+	if(save){
+		saveRDS(
+			models,
+			file = paste0(normalizePath(outDir),"/",fname)
+		)
+	}
+	
+	if(directReturn){
+		return(models)
+	} else {
+		return(
+			dat %>% 
+				ungroup() %>% 
+				distinct(BGIid) %>%
+				nrow() #%>% 
+				#list()
+		)
+	}
+}
+#tmp <- myModeler(form = formula(ageDNAextraction ~ methQNorm))
+```
+
+
+## model summary
+
+```{r}
+myModelerSummary <- function(models, pValCut, coefVars = "methQNorm"){
+	models %>%
+		mutate(glance = map(model, ~myGlance(.x, coefVars))) %>%
+		unnest(glance) %>%
+		select(-data,-model) %>%
+		filter(p_value < pValCut) %>%
+		arrange(p_value)
+}
+#myModelerSummary(tmp,gws)
+```
+
+# meth data summary stats
+
+```{r,fig.width=12,fig.asp=9/16}
+meDIPseqRPMtRNALongMeta %>%
+	#filter(tRNAname == "tRNA-iMet-CAT-1-4") %>%
+	groupSummaryStats(RPM,wChr,wStart) %>%
+	gather(key = stat,value = value,-wChr,-wStart) %>%
+	group_by(stat) %>%
+	#do(
+	#	plot = 
+		ggplot(.,aes(value)) + 
+			geom_density() + 
+			facet_wrap(~stat,scales = "free")
+			#labs(title = .$stat)
+	#) %>% 
+	#pull(plot)
+```
+
+```{r,fig.width=12,fig.asp=9/16}
+meDIPseqRPMtRNALongMeta %>%
+	#filter(tRNAname == "tRNA-iMet-CAT-1-4") %>%
+	QnormMeth() %>%
+	groupSummaryStats(methQNorm,wChr,wStart) %>%
+	gather(key = stat,value = value,-wChr,-wStart) %>%
+	group_by(stat) %>%
+	#do(
+	#	plot = 
+		ggplot(.,aes(value)) + 
+			geom_density() + 
+			facet_wrap(~stat,scales = "free") + 
+			theme(axis.text.x = element_text(angle = 90))
+			#labs(title = .$stat)
+	#) %>% 
+	#pull(plot)
+```
+
+# Age Modeling
+
+## Model Specs
+
+```{r}
+modelDescs <- tibble(
+	norm = rep(TRUE, 14),
+	dropMissing = c(TRUE,FALSE,TRUE,TRUE,FALSE,rep(TRUE, 9)),
+	form = c(
+		"ageDNAextraction ~ methQNorm",
+		"ageDNAextraction ~ methQNorm",
+		"ageDNAextraction ~ methQNorm + eosinophils + lymphocytes + monocytes + neutrophils",
+		"ageDNAextraction ~ methQNorm + Batch",
+		rep(c(
+			"ageDNAextraction ~ methQNorm + eosinophils + lymphocytes + monocytes + neutrophils + Batch"
+		),2),
+		"ageDNAextraction ~ methQNorm + eosinophils + lymphocytes + monocytes + neutrophils + Batch + KCLfam",
+		rep(c(
+			"ageDNAextraction ~ methQNorm + eosinophils + lymphocytes + monocytes + neutrophils + Batch"
+		),7)
+	),
+	outDir = rep(outDir, 14),
+	filterFunc = c(NA,NA,NA,NA,NA,NA,"longitudinals","unrelated","unrelated1","unrelated2", "MZ1", "MZ2","DZ1","DZ2"),
+	prefix = c(NA,NA,NA,NA,NA,NA,"longitudinals","unrelated","unrelated1","unrelated2", "MZ1", "MZ2","DZ1","DZ2")
+)
+modelDescs
+```
+
+```{r}
+#plan(tweak(multisession, workers = 4))
+#options('future.globals.maxSize' = Inf)
+#plan(batchtools_slurm)
+```
+
+```{r}
+modelDescs %>%
+	rowwise() %>%
+	mutate(
+		filename = pmap_chr(
+			list(
+				form = form, prefix = prefix,
+				dropMissing = dropMissing, norm = norm
+			),
+			~myModelerName(
+				form = formula(form), prefix = prefix,
+				dropMissing = dropMissing, norm = norm
+			)
+		)
+	) %>% select(filename)
+```
+
+## model runs
+
+```{r}
+modelRunner <- function(modelDescs,dat) {
+	modelDescs$res <- 
+	#future_
+	mapply(
+		#future.globals = structure(TRUE, add = c("metadata", "trueLongMeta4yrPlus", "longs")),
+		function(...){myModeler(...)},
+		form = modelDescs$form,
+		outDir = modelDescs$outDir,
+		prefix = modelDescs$prefix,
+		filterFunc = modelDescs$filterFunc,
+		MoreArgs = list(
+			dat = dat
+		)
+	)
+	return(modelDescs)
+}
+```
+
+```{r}
+modelsRuns <- modelRunner(
+	modelDescs,# %>% filter(prefix %in% c("DZ1","DZ2")) ,
+	#meDIPseqRPMtRNALongMetaFST
+	"out/meDIPseqRPMtRNALongMeta.fst"
+)
+modelsRuns
+```
+
+## Model results
+
+```{r}
+modelsResults <- 
+modelsRuns %>%
+	rowwise() %>%
+	mutate(
+		resSummary = pmap(
+			list(
+				form = form, outDir = outDir,
+				prefix = prefix
+			),
+			~myModelerSummary(
+				myModelerReader(
+					form = formula(form), outDir = outDir,
+					prefix = prefix
+				),
+				1#0.05
+			)
+		)
+	)
+```
+
+```{r}
+modelsResults %>%
+	mutate(name = myModelerName(
+				form = formula(form), prefix = prefix,
+				dropMissing = dropMissing, norm = norm
+			))
+```
+
+
+```{r}
+modelsResults %>% 
+	unnest() %>%
+	write_tsv(paste0(params$outDir,"combinedModelSummaries.tsv"))
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>

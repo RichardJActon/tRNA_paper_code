@@ -1,0 +1,408 @@
+---
+title: "biostrings MINTmap Reference Builder"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+# runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+bibliography: "`r normalizePath(params$bibliography)`"
+csl: "`r normalizePath(params$csl)`"
+params:
+  pwd: "/scratch/rja1e16/PhD_git/Projects/tRNA_Stuff/tRNA_expression/src/"
+  bibliography: "~/Documents/bibtex/library.bib"
+  csl: "~/Documents/bibtex/genomebiology.csl"
+  min: 16
+  max: 50
+  minOverlap: 1
+  #plan: "plan(list(tweak(multiprocess,workers = 6),sequential))"
+  planIndex: "plan(list(tweak(batchtools_slurm,resources = list(walltime = '02:00:00',ntasks=40L)),tweak(multiprocess,workers=40)))"
+  planGenomeSearch: "plan(list(tweak(batchtools_slurm,resources = list(walltime = '48:00:00',ntasks=80L)),tweak(multiprocess,workers=70)))"
+  outDir: "../testOut/"
+  tRNAspace: "tRNAspace_test.fa"
+  anno: "anno_test.txt"
+  lookup: "lookup_test.txt"
+---
+
+# Outline
+
+Building a custom [MINTmap](https://github.com/TJU-CMC-Org/MINTmap) reference to search for reads mapping to pre-tRNAs [@Loher2017]. 
+
+Reads will be assumed to be mapping to pre-tRNAs if they overlap either the 5' or 3' end of the genomic tRNA sequence - without the CCA added. The degree of overlap can be varied in the parameters of this notebook but by default a minimum length of 16bp, and the maximum is 50bp with a minimum of 1bp up or downstream of the 5' and 3' ends respectively, such that at least 1bp of tRNA sequence and 1bp of flanking sequence is present in each fragment. Fragments must also be completely unique in the genome.
+
+## Steps
+
+? = more conservative step - implement first, ~ less computationally intensive?
+
+- get tRNA sequences
+- add 15bp of flanking region
+- ? exclude middle sequences - tStart + 49 and inverse
+- get all susequences
+	- length 16-50 (params - defined in params)
+	-? overlapping up/down stream of the tRNA gene annotation by at least 1 base
+	  (generate all substrings and filter those with coords not overlapping)
+- get sequences - those matching in the genome only once (plus RT matching)
+
+# Set-up
+
+## Environment
+
+```{r env}
+knitr::opts_knit$set(root.dir = normalizePath(params$pwd))
+setwd(params$pwd)
+```
+
+```{r outDir}
+dir.create(params$outDir,showWarnings = FALSE,recursive = TRUE)
+```
+
+## libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(Biostrings)
+	library(BSgenome.Hsapiens.UCSC.hg19)
+	library(future.apply)
+	library(future.batchtools)
+	library(BiocGenerics)
+	library(parallel)
+	library(GenomicRanges)
+})
+```
+
+## Data Read-In
+
+## tRNA sequences
+
+## tRNA annotation details
+
+```{r tRNAanno}
+tRNAanno <- read_tsv(
+	file = "../../tRNA-GtRNAdb/hg19-tRNAs.bed",
+	col_names = unlist(
+		strsplit(
+			readLines(
+				"../../tRNA-GtRNAdb/std_tRNA_header.txt"
+			),split = "\t"
+		)
+	)
+)
+```
+
+# tRNA annotation to Granges
+
+```{r tRNAGRanges}
+grtRNA <- GRanges(
+	tRNAanno$tChr,
+	IRanges(
+		start = tRNAanno$tStart, end = tRNAanno$tEnd
+	),
+	strand = tRNAanno$strand
+)
+
+genome(grtRNA) <- "hg19"
+
+mcols(grtRNA)["tRNAname"] <- tRNAanno$tRNAname
+# expand meta?
+
+grtRNA
+```
+
+# Hg19 from the `BSgenome.Hsapiens.UCSC.hg19` package
+
+```{r Hsapiens}
+Hsapiens
+```
+
+## get tRNA sequences
+
+```{r gettRNAseqs}
+tRNAseqs <- getSeq(
+	Hsapiens,
+	grtRNA
+)
+tRNAseqs
+```
+
+# Overlap Parameters
+
+```{r overlapParams}
+min <- params$min #16
+max <- params$max #50
+minOverlap <- params$minOverlap # 1
+
+internalOffset <- max - minOverlap
+externalOffset <- min - minOverlap
+```
+
+# Selecting tRNA regions
+
+Getting the ends of the tRNA coordinates and selecting the flanking regions according to the overlap parameters
+
+- `min` minimum fragment length
+- `max` maximum fragment length
+- `minOverlap` specifies the minimum number of bases outside of the core transcribed tRNA sequence required to be in a fragment.
+
+This excludes 'internal' tRNA sequences not overlapping the ends
+
+    |---- 5' region---|
+           <=========== tRNA gene ===========>
+                                        |--- 3' region----|
+
+```{r substrRegions5}
+tRNA5 <- grtRNA
+end(tRNA5) <- start(grtRNA) + internalOffset
+start(tRNA5) <- start(grtRNA) - externalOffset
+
+mcols(tRNA5)["side"] <- "5'"
+tRNA5
+```
+
+```{r substrRegions3}
+tRNA3 <- grtRNA
+end(tRNA3) <- end(grtRNA) + externalOffset
+start(tRNA3) <- end(grtRNA) - internalOffset
+
+mcols(tRNA3)["side"] <- "3'"
+tRNA3
+```
+
+```{r combineRegions}
+tRNAsubstrRegions <- c(tRNA5,tRNA3)
+tRNAsubstrRegions
+```
+
+# substring generation
+
+```{r getSubstrings}
+tRNAsubstrRegionsSeq <- getSeq(Hsapiens,tRNAsubstrRegions)
+```
+
+# tRNAspace
+
+```{r tRNAspace}
+tRNAspace <- grtRNA 
+start(tRNAspace) <- start(tRNAspace) - externalOffset
+end(tRNAspace) <- end(tRNAspace) + externalOffset + 1 ##!! ??
+
+tRNAspaceSeq <- getSeq(Hsapiens,tRNAspace)
+
+names(tRNAspaceSeq) <-
+paste(
+	mcols(tRNAspace)$tRNAname,
+	as.character(strand(tRNAspace)),
+	as.character(seqnames(tRNAspace)),
+	start(tRNAspace),
+	end(tRNAspace),
+	"flank",
+	externalOffset,
+	sep = "_"
+)
+
+writeXStringSet(
+	tRNAspaceSeq,
+	filepath = paste0(params$outDir,params$tRNAspace),
+	width = 10000L
+)
+tRNAspaceSeqMD5 <- tools::md5sum(paste0(params$outDir,params$tRNAspace))
+```
+
+# Get Fragment Locations
+
+remove xFrags and keep Frags - xFrags do not overlap the end points of the tRNA region by the required amount
+
+           | |- xFrag -|                     | |- xFrag -|
+    |---- 5' region-----|                    |
+           <=========== tRNA gene ===========>
+           |                           |---- 3' region----|
+           |                             |--- Frag --|
+
+```{r planIndex}
+eval(parse(text = params$planIndex))
+```
+
+```{r indexMatches}
+matches <- future_lapply(min:max, function(x){
+	# get relative positions of all fragments
+	relMatches <- vmatchPattern(
+		paste0(rep("N", x), collapse = ""),
+		tRNAsubstrRegionsSeq,
+		fixed = FALSE
+	)
+	# get absolute positions of all fragments
+	absMatches <- future_lapply(seq_along(relMatches), function(i){
+		do.call(c,
+			mapply(
+				start(relMatches[[i]]), end(relMatches[[i]]),
+				FUN = function(s,e){
+					absMatch <- tRNAsubstrRegions[i]
+					start(absMatch) <- start(tRNAsubstrRegions[i]) + s
+					end(absMatch) <- start(tRNAsubstrRegions[i]) + e
+					return(absMatch)
+				}
+			)
+		)
+	})
+})
+```
+
+```{r saveMatches}
+saveRDS(matches,paste0(params$outDir,"matches.Rds"))
+```
+
+```{r readMatches,eval=FALSE,include=FALSE,echo=FALSE}
+matches <- readRDS(paste0(params$outDir,"matches.Rds"))
+```
+
+## Filter fragments for appropriate overlap
+
+overlap regions - get the positions that fragments are required to overlap
+
+```{r getOverlapRegions}
+overlapRegion5 <- grtRNA
+start(overlapRegion5) <- start(grtRNA) - minOverlap
+end(overlapRegion5) <- start(grtRNA)
+mcols(overlapRegion5)["side"] <- "5'"
+
+overlapRegion3 <- grtRNA
+end(overlapRegion3) <- end(grtRNA) + minOverlap
+start(overlapRegion3) <- end(grtRNA)
+mcols(overlapRegion3)["side"] <- "3'"
+
+overlapRegions <- c(overlapRegion5, overlapRegion3)
+overlapRegions
+```
+
+Filtering fragments that overlap the specified regions
+
+```{r searchPlan}
+eval(parse(text = params$planGenomeSearch))
+```
+
+```{r filterOverlappingRegions}
+overlappingMatches <- future_lapply(matches,function(mch) {
+	suppressPackageStartupMessages({library(GenomicRanges)})
+	future_lapply(seq_along(mch),function(i) {
+		subsetByOverlaps(
+			mch[[i]],
+			overlapRegions[i],
+			minoverlap = 2 * minOverlap
+		)
+	})
+})
+
+overlappingMatchesComb <- 
+do.call(
+	c, lapply(overlappingMatches, function(x) {
+		do.call(c, x)
+	})
+)
+
+frags <- getSeq(Hsapiens,overlappingMatchesComb)
+```
+
+```{r saveOverlappingRegions}
+saveRDS(frags,paste0(params$outDir,"frags.Rds"))
+```
+
+```{r readOverlappingRegions,eval=FALSE,include=FALSE,echo=FALSE}
+frags <- readRDS(paste0(params$outDir,"frags.Rds"))
+```
+
+# Count the number of matches of the fragments to the genome
+
+forward and reverse genome
+
+```{r seqSearchF}
+fragCountsByChrF <- 
+future_lapply(names(Hsapiens), function(chr) {
+	suppressPackageStartupMessages({library(BSgenome)}) ##!! resolves namespace issue in child process
+	future_sapply(frags, function(frag) {
+		countPattern(as.character(frag),Hsapiens[[chr]])
+	})
+})
+```
+
+```{r seqSearchR}
+fragCountsByChrR <-
+future_lapply(names(Hsapiens), function(chr) {
+	suppressPackageStartupMessages({library(BSgenome)}) ##!! resolves namespace issue in child process
+	future_sapply(frags, function(frag) {
+		countPattern(as.character(frag), reverseComplement(Hsapiens[[chr]]))
+	})
+})
+```
+
+```{r combinedSearchCounts}
+fragCountsByChr <- c(fragCountsByChrF, fragCountsByChrR)
+# names c(paste0(names(Hsapiens),"_F"),paste0(names(Hsapiens),"_R"))
+totalCounts <- do.call(cbind,fragCountsByChr) %>% rowSums()
+```
+
+```{r annotateCounts}
+#overlappingMatchesComb
+mcols(overlappingMatchesComb)$seq <- as.vector(frags)
+mcols(overlappingMatchesComb)$count <- totalCounts 
+```
+
+# Select only those fragments matching exactly once
+
+```{r filterUniqueFrags}
+overlappingMatchesCombUnique <- 
+overlappingMatchesComb[mcols(overlappingMatchesComb)$count == 1]
+```
+
+```{r saveAnnotation}
+mcols(overlappingMatchesCombUnique) %>%
+	as.data.frame() %>%
+	tidyr::unite(col = "anno",tRNAname,side,sep = "_") %>%
+	select(seq,anno) %>%
+	write_tsv(paste0(params$outDir,params$anno))
+
+annoMD5 <- tools::md5sum(paste0(params$outDir,params$anno))
+```
+
+```{r saveLookup}
+cat(
+	paste0("#TRNASEQUENCES:",params$tRNAspace," MD5SUM:",tRNAspaceSeqMD5,"\n"),
+	file = paste0(params$outDir,params$lookup)
+)
+
+cat(
+	paste0("#OTHERANNOTATIONS:",params$anno," MD5SUM:",annoMD5,"\n"),
+	file = paste0(params$outDir,params$lookup),
+	append = TRUE
+)
+
+mcols(overlappingMatchesCombUnique) %>%
+	as.data.frame() %>%
+	mutate(type = "Y") %>%
+	select(seq,type) %>%
+	write_tsv(
+		paste0(params$outDir,params$lookup),
+		append = TRUE,
+		col_names = FALSE
+	)
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+

@@ -1,0 +1,736 @@
+---
+title: "tRNA methylation in fetal tissues"
+author: "Richard J. Acton"
+date: "2018-10-17"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+bibliography: "`r normalizePath('../library.bib')`"
+---
+
+# Intro
+
+## Aim
+
+- Aquire tRNA gene methylation data for fetal tissues, in order to establish if tRNAs are hypomethylated in fetal tissues
+
+
+[@Yang2016] created "epiTOC" (Epigenetic Timer Of Cancer) and used DNAm data from fetal tissues:
+
+> Age-hypermethylated CpGs were filtered further, selecting only those with absent or low (beta <0.2) methylation across 52 fetal tissue samples encompassing 11 tissue types (cord blood ([GSE72867](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE72867)), stomach, heart, tongue, kidney, liver, brain, thymus, spleen, lung, adrenal gland [@Nazor2012]).
+
+The methylation data takes the form of mixed 450k and 27k illumina bead-chip methylation array beta values.
+
+[@Nazor2012] Tissue specific methylation data is under: [GSE30654](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE30654), which contains samples other than the fetal samples so accessions for the tissues listed in [@Yang2016] were selected, this totaled 51 samples from 10 tissue types.
+
+The epiTOC paper referenced GSE72867 for cord blood this contained 450k array data for CD34+ cells from cord blood including 5 controls each with 3 technical replicates. As there was no additional information on which samples were used from this set all the control samples were used, taking the mean of the technical replicates.
+
+Specific accessions for the selected samples were compiled into a [list](~/Documents/PhD_Stuff/phd/Projects/tRNA_Stuff/data/epiTOC_fetal_DNAm_datasets.csv) (see below)
+
+# Setup
+
+## libs
+
+```{r}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(broom)
+	library(rvest)
+	library(plotly)
+	
+	library(heatmaply)
+	library(ComplexHeatmap)
+})
+```
+
+```{r}
+nest <- nest_legacy
+unnest <- unnest_legacy
+```
+
+```{r}
+if(!dir.exists("graphics")){
+	dir.create("graphics", showWarnings = FALSE, recursive = TRUE)
+}
+```
+
+## data read-in
+
+### accession from samples used in epiTOC
+
+```{r}
+epiTOCfetalTissues <- read_csv("data/epiTOC_fetal_DNAm_datasets.csv")
+```
+
+```{r}
+epiTOCfetalTissuesL <- epiTOCfetalTissues %>% 
+	gather(key = "tissue", value = "accession", stomach:cord_blood) %>%
+	na.omit() %>%
+	mutate(
+		cordBlood_groups = if_else(
+			grepl(x = tissue, pattern = "cord_blood"), cordBlood_groups, "NA"
+		)
+	)
+```
+
+### tRNA data
+
+```{r}
+tRNAprobes <- read_delim(
+	delim = "\t",
+	file = "../tRNA-GtRNAdb/450k_coresponding_hg19tRNAs.bed",
+	col_names = c(
+		"pChr","pStart","pEnd","probeID",
+		as.character(
+			read_delim(
+				delim = "\t",
+				file = "../tRNA-GtRNAdb/std_tRNA_header.txt",
+				col_names = FALSE
+			)
+		)
+	)
+)
+```
+
+```{r}
+tRNAge <- read_delim(
+	delim = "\t",
+	file = "../tRNA-GtRNAdb/GenWideSigWintRNAs.txt",
+	col_names = "tRNAname",
+	col_types = "c"
+)
+```
+
+```{r}
+gwsBB6 <- read_tsv(
+	"../tRNA-GtRNAdb/BB_GWS_tRNA.txt",
+	col_names = "tRNAname", col_types = "c"
+)
+
+swsBB23 <- read_tsv(
+	"../tRNA-GtRNAdb/swsBB23.tsv",
+	col_names = "tRNAname", col_types = "c"
+)
+
+bltRNAs <- read_tsv(
+	"../tRNA-GtRNAdb/tRNAs-in-hg19-blacklist-v2.txt",
+	col_names = "tRNAname", col_types = "c"
+)
+```
+
+### Codon Usage data / related tRNA data
+
+```{r}
+tRNA <- read.table("../tRNA-GtRNAdb/hg19-tRNAs-SeqStrPseu.bed") 
+
+colnames(tRNA) <- 
+c(
+	as.character(
+		read.table(
+			"../tRNA-GtRNAdb/std_tRNA_header.txt",
+			stringsAsFactors = FALSE
+		)
+	),
+	"pseudo","str","seq"
+)
+
+tRNA <- tRNA %>%
+	extract(
+		tRNAname,
+		c("nmt", "aa", "codon"),
+		"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-",
+		remove = FALSE
+	)
+
+```
+
+```{r}
+palette <- c("#e6194b","#3cb44b","#424242","#0082c8","#f58231","#911eb4","#46f0f0","#f032e6","#d2f53c","#fabebe",
+             "#008080","#e6beff","#aa6e28","#fffac8","#800000","#aaffc3","#808000","#ffd8b1","#000080","#808080",
+             "#000000","#00FF00","#424242","#0000FF")
+
+CodonUsageFreqHuman <- read.table(
+	"../tRNA-GtRNAdb/CodonUsageFreqHuman.tab",
+	header = TRUE,
+	stringsAsFactors = FALSE
+)
+```
+
+### Methylation data
+
+#### Web-scrape
+
+```{r, eval=FALSE}
+methylationArrayData <- lapply(
+(epiTOCfetalTissuesL %>% 
+	pull(accession)),
+	function(x){
+		paste0(	"https://www.ncbi.nlm.nih.gov/geo/tools/geometa.cgi?acc=",
+				x,
+				"&scope=full&mode=miniml"
+		) %>%
+		read_html() %>% #html_structure()
+		html_nodes("internal-data") %>% #pre,x = "pre"
+		html_text() %>%
+		read_delim(delim = "\t", col_names = FALSE) %>% #c("probeID","beta","detection-p")
+		mutate(accession=x)
+	}
+)
+methylationArrayDataS <- lapply(methylationArrayData, function(x) {x %>% select(X1,X2,accession)})
+methylationArrayDataDF <- do.call(rbind, methylationArrayDataS)
+methylationArrayDataDF <- methylationArrayDataDF %>% rename(probeID = X1, beta = X2)
+```
+
+```{r, eval=FALSE}
+saveRDS(
+	methylationArrayDataDF,
+	file = "data/epiTOCFetal_methylationArrayDataDF.Rds"
+)
+```
+
+#### Load Local data copy
+
+```{r, eval=FALSE}
+methylationArrayDataDF <- readRDS(
+	file = "data/epiTOCFetal_methylationArrayDataDF.Rds"
+)
+```
+
+# Data Overview
+
+## N probes per sample
+
+```{r, eval=FALSE}
+methylationArrayDataDF %>%
+	group_by(accession) %>%
+	summarise(n = n())
+```
+
+## Beta density plots
+
+```{r, fig.width = 8, fig.height = 6, eval = FALSE}
+ggplotly(
+	methylationArrayDataDF %>%
+		ggplot(aes(beta, colour = accession)) + 
+			geom_density() + 
+			guides(colour=FALSE)
+)
+```
+
+# Data Processing
+
+## Mean betas from technical replicates
+
+NB keeps an aribtary accession number from each sample for cross referencing with tissue type data
+
+```{r, eval=FALSE}
+meanBloodBetas <- epiTOCfetalTissuesL %>% 
+	filter(!cordBlood_groups == "NA") %>% 
+	extract(
+		col = cordBlood_groups,
+		into = c("sample", "replicate"),
+		regex = "(Ctrl\\d+)_(\\w)",
+		remove = FALSE
+	) %>%
+	group_by(sample) %>%
+	do(meanBetas = {
+		data <- .
+		methylationArrayDataDF %>% 
+		filter(
+			accession %in% (data %>% pull(accession) )
+		) %>% 
+		group_by(probeID) %>% 
+		summarise(beta = mean(beta), accession = data$accession[1])
+	})
+```
+
+```{r,eval=FALSE}
+saveRDS(
+	meanBloodBetas,
+	"data/epiTOCFetal_meanBloodBetas.Rds"
+)
+```
+
+```{r,eval=FALSE}
+meanBloodBetas <- readRDS(
+	"data/epiTOCFetal_meanBloodBetas.Rds"
+)
+```
+
+Unnest and replace data with technical replicates with the mean values
+
+```{r, eval=FALSE}
+methylationArrayDataReptMeansDF <-
+bind_rows(
+	methylationArrayDataDF %>%
+		filter(
+			accession %in% (
+				epiTOCfetalTissuesL %>% 
+				filter(cordBlood_groups == "NA") %>%
+				pull(accession)	
+			)
+		),
+	meanBloodBetas %>% 
+		unnest() %>%
+		select(probeID, beta, accession)
+)
+```
+
+```{r, eval=FALSE}
+saveRDS(
+	methylationArrayDataReptMeansDF,
+	file = "data/epiTOCFetal_methylationArrayDataReptMeansDF.Rds"
+)
+```
+
+#### Load Local data copy
+
+```{r}
+methylationArrayDataReptMeansDF <- readRDS(
+	file = "data/epiTOCFetal_methylationArrayDataReptMeansDF.Rds"
+) 
+```
+
+## Get tissue categories
+
+```{r}
+methylationArrayDataReptMeansDF <- left_join(
+	methylationArrayDataReptMeansDF,
+	epiTOCfetalTissuesL %>% select(tissue, accession),
+	by = c("accession", "tissue")
+)
+```
+
+# Get meth data from tRNA probes
+
+```{r}
+tRNAprobesMethData <- 
+left_join(
+	tRNAprobes,
+	methylationArrayDataReptMeansDF,
+	by = "probeID"
+) %>% 
+	extract(tRNAname,
+			c("nmt","aa","codon"),
+			"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-",
+			remove = FALSE
+	) %>% 
+	mutate(tRNAge = tRNAname %in% (tRNAge %>% pull(tRNAname)))
+```
+
+```{r}
+tRNAmeanMethByTissue <-
+tRNAprobesMethData %>%
+	dplyr::select(probeID, tChr, pStart, tStart, tRNAname, nmt, aa, strand, codon, beta, accession, tissue, tRNAge) %>%
+	dplyr::group_by(tChr, tStart, tRNAname, nmt, aa, strand, codon, tissue, accession, tRNAge) %>%
+	summarise(beta = mean(beta))
+```
+
+```{r}
+tRNAmeanMethByTissue %>% nrow()
+
+tRNAmeanMethByTissue <- 
+tRNAmeanMethByTissue %>%
+	filter(!tRNAname %in% bltRNAs)
+
+tRNAmeanMethByTissue %>% nrow()
+```
+
+
+## Number of tRNAs covered:
+
+```{r}
+NtRNAgenes <- tRNAmeanMethByTissue %>%
+	ungroup() %>%
+	select(tRNAname) %>%
+	distinct() %>%
+	nrow()
+NtRNAgenes
+```
+
+## Number of tRNAge genes covered
+
+```{r}
+NtRNAgeGenes <- tRNAmeanMethByTissue %>%
+	ungroup() %>%
+	filter(tRNAge == TRUE) %>%
+	select(tRNAname) %>%
+	distinct() %>%
+	nrow()
+NtRNAgeGenes
+```
+
+```{r}
+meanMethBytRNAByTissue <- tRNAprobesMethData %>%
+	select(probeID,tChr,pStart,tStart,tRNAname,nmt,aa,strand,codon,beta,accession,tissue) %>%
+	group_by(tChr,tStart,tRNAname,nmt,aa,strand,codon,tissue) %>%
+	summarise(beta = mean(beta)) %>%
+	ungroup()
+
+# tRNAs with mean beta < 0.2 in 1 or more tissues
+meanMethBytRNAByTissue %>%
+	filter(beta < 0.2) %>% 
+	select(tRNAname) %>% 
+	distinct() %>%
+	nrow()
+
+# tRNAs with mean beta >= 0.2 in 1 or more tissues
+meanMethBytRNAByTissue %>%
+	filter(beta >= 0.2) %>% 
+	select(tRNAname) %>% 
+	distinct() %>%
+	nrow()
+```
+
+## tRNA mean metylation by tissue plots
+
+### Heatmaps
+
+```{r}
+meanMethBytRNAByTissueMat <- 
+tRNAmeanMethByTissue %>%
+	ungroup() %>%
+	select(tRNAname,tissue,beta) %>%
+	group_by(tRNAname,tissue) %>%
+	summarise(mean = mean(beta)) %>%
+	drop_na(tissue) %>%
+	spread(tissue,mean) %>%
+	na.omit() %>%
+	column_to_rownames("tRNAname") %>%
+	data.matrix()
+
+meanMethBytRNAByTissueMat %>% nrow()
+```
+
+```{r}
+col_fun <- circlize::colorRamp2(
+	c(0, 0.5, 1),
+	c("#ffff00", "#19ff00", "#0033cc")
+)
+```
+
+```{r,fig.width=9,fig.height=12}
+meanMethBytRNAByTissueHeatmap <-
+meanMethBytRNAByTissueMat %>%
+	Heatmap(
+		heatmap_width = unit(5.4,"inches"),
+		heatmap_height = unit(11.8,"inches"),
+		column_title_gp = gpar(fontsize = 11, fontface = "bold"),
+		#"Fetal Tissue tRNA methylation",
+		column_title = "Mean Methyation by tRNA\nin Fetal Tissue", 
+		name = "Meth",
+		column_names_rot = 45,
+		row_dend_width = unit(0.2, "npc"),
+		row_names_gp = gpar(fontsize = 6),
+		row_title = "tRNA gene",
+		col = col_fun
+	)
+
+png(
+	filename = "graphics/meanMethBytRNAByFetalTissueHeatmap.png",
+	#width = 9, height = 12, units = "in", res = 192
+	width = 6, height = 12, units = "in", res = 192
+)
+meanMethBytRNAByTissueHeatmap
+dev.off()
+
+meanMethBytRNAByTissueHeatmap
+```
+
+```{r,fig.width=9,fig.height=12}
+meanMethBytRNAByTissueHeatmapAAsplit <-
+meanMethBytRNAByTissueMat %>%
+  Heatmap(
+    heatmap_width = unit(5.4, "inches"),
+    heatmap_height = unit(11.8, "inches"),
+    column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+    column_title = "Mean Methyation by tRNA\nin Fetal Tissue",
+    name = "Meth",
+    column_names_rot = 45,
+    row_dend_width = unit(0.2, "npc"),
+    row_names_gp = gpar(fontsize = 6),
+    row_split = rownames(meanMethBytRNAByTissueMat) %>%
+      gsub(pattern = "tRNA-(\\w+)-\\w+-\\w+-\\d+", replacement = "\\1"),
+    row_title = "tRNA gene",
+    col = col_fun
+  )
+
+png(
+  filename = "graphics/meanMethBytRNAByFetalTissueHeatmapAAsplit.png",
+  #width = 9, height = 12, units = "in", res = 192
+  width = 6, height = 12, units = "in", res = 192
+  )
+meanMethBytRNAByTissueHeatmapAAsplit
+dev.off()
+
+meanMethBytRNAByTissueHeatmapAAsplit
+```
+
+```{r,fig.width=9,fig.height=12}
+pseudoSplit <- tRNA$pseudo
+names(pseudoSplit) <- tRNA$tRNAname
+# pseudoSplit[rownames(meanMethBytRNAByTissueMat)]
+
+meanMethBytRNAByTissueHeatmapPseudosplit <-
+meanMethBytRNAByTissueMat %>%
+	Heatmap(
+		heatmap_width = unit(5.4, "inches"),
+		heatmap_height = unit(11.8, "inches"),
+		column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+		column_title = "Mean Methyation by tRNA\nin Fetal Tissue",
+		name = "Meth",
+		column_names_rot = 45,
+		row_dend_width = unit(0.2, "npc"),
+		row_names_gp = gpar(fontsize = 6),
+		row_split = pseudoSplit[rownames(meanMethBytRNAByTissueMat)],
+		row_title = "tRNA gene",
+		col = col_fun
+	)
+
+png(
+	filename = "graphics/meanMethBytRNAByFetalTissueHeatmapPseudosplit.png",
+	#width = 9, height = 12, units = "in", res = 192
+	width = 6, height = 12, units = "in", res = 192
+)
+meanMethBytRNAByTissueHeatmapPseudosplit
+dev.off()
+
+meanMethBytRNAByTissueHeatmapPseudosplit
+```
+
+```{r}
+heatmaply(meanMethBytRNAByTissueMat)
+```
+
+### Boxplots
+
+```{r}
+# custom labeler: (character vector in and out)
+tRNA_labeller <- function(value) {sapply(value,
+	function(n){
+	tRNAmeanMethByTissue %>%
+		ungroup() %>%
+		select(tRNAname,tChr,strand) %>%
+		distinct() %>%
+		filter(tRNAname==as.character(n)) %>%
+		unlist() %>%
+		(function(d) paste0(d["tRNAname"]," (",d["strand"],") ",d["tChr"])) %>%
+		return()
+	}
+)}
+```
+
+```{r,fig.width=12,fig.height=6.75}
+plots <- tRNAmeanMethByTissue %>%
+	group_by(aa) %>%
+		do(plot = 
+			ggplot(.,aes(tissue,beta)) +
+				#geom_point() +
+				geom_boxplot(aes(fill=tissue)) + 
+				guides(fill=FALSE) +
+				ylim(0,1) +
+				facet_wrap(~tRNAname,labeller = labeller(tRNAname = tRNA_labeller)) + #,scales = "free_y"
+				geom_hline(aes(colour=tRNAge,yintercept = 0.2)) +
+				scale_colour_manual(values = c("TRUE"="red","FALSE"="black"),drop=FALSE) +
+				labs(	title = paste0("tRNA genes which are ",.$aa," isoacceptors"),
+						subtitle = "mean methylation across all probes in a tRNA gene for each fetal tissue"
+				) + 
+				theme(axis.text.x = element_text(angle = 90,vjust = 0.5))
+		)
+
+plots$plot
+#plots$plot[[3]]
+#plots %>% filter(aa=="iMet") %>% pull(plot)
+```
+
+```{r,eval=FALSE}
+nil <- plots %>% do(out=ggsave(plot = .$plot,
+					filename = paste0("graphics/epiTOCfetalTissuestRNAMethylation/tRNAmeanMethByTissue_" , .$aa , ".png"),
+					width = 12,
+					height = 6.75
+				))
+rm(nil)
+```
+
+# Differential methylation by tissue 
+
+## Kruskal-Wallis test 
+
+```{r,fig.width=12,fig.height=6}
+nestedBytRNA <- tRNAprobesMethData %>% 
+	nest(-tRNAname)
+
+KWtissueBeta <- nestedBytRNA %>% 
+	group_by(tRNAname) %>%
+	mutate(test=purrr::map(data, ~kruskal.test(tissue ~ beta, data = .)))#aov
+
+KWtissueBetaGlance <- KWtissueBeta %>% unnest(test %>% purrr::map(broom::glance))
+KWtissueBetaGlance %>%
+	ggplot(aes(tRNAname,p.value)) + 
+		geom_col() + 
+		geom_hline(yintercept = 0.05,colour="red") +
+		theme(axis.text.x = element_text(angle=90,vjust = 0.5))
+```
+
+No tRNAs for which methylation was significantly different between tissues by Kruskal-Wallis rank sum test
+
+# Codons
+
+## Mean meth by codon
+
+```{r,fig.width=12,fig.height=6.75}
+tRNAmeanMethByTissue %>%
+	ggplot(.,aes(tissue,beta)) +#,group=aa
+		stat_summary(fun.data = "mean_cl_boot")+
+		guides(fill=FALSE) +
+		ylim(0,1) +
+		facet_wrap(~codon) + #,scales = "free_y"#labeller = labeller(tRNAname = tRNA_labeller)
+		geom_hline(aes(colour=tRNAge,yintercept = 0.2)) +
+		scale_colour_manual(values = c("TRUE"="red","FALSE"="black"),drop=FALSE) +
+		# labs(	title = "x",#paste0("tRNA genes which are ",.$aa," isoacceptors"),
+		# 		subtitle = "mean methylation across all probes in a tRNA gene for each fetal tissue"
+		# ) + 
+		theme(axis.text.x = element_text(angle = 90,vjust = 0.5))
+
+```
+
+tRNAs with certain codons seem more methylated than others, some of the more methylated codons seemed to correspond to those that divered from expectation based on frequency of occurance in the exom see below. e.g. GTT, CTT. Therefore I took a look the relationship between mean methylation levels on tRNAs with a given codon and residuals for the relationship between number of tRNA genes and codon fequency.
+
+```{r, fig.width = 9, fig.height = 4.5}
+revTrans <- function(x){
+        ntPairs <- data.frame("sense" = c("A","T","G","C","N"),
+                              "antisense"=c("T","A","C","G","N"),
+                              stringsAsFactors = FALSE)
+        strsplit(x, NULL) %>%
+        lapply(rev) %>%
+        lapply(function(x) ntPairs$antisense[match(x,ntPairs$sense)]) %>%
+        sapply(paste, collapse="")
+    }
+
+aaBycodon <- tRNA %>% select(aa,codon) %>% unique()
+aaBycodon$codon <- aaBycodon$codon %>% revTrans()
+
+AAUsageFreqHuman <- inner_join(
+CodonUsageFreqHuman,
+aaBycodon,
+by="codon") 
+
+NtRNAbyaa <- tRNA %>% 
+    group_by(aa) %>% 
+    ###
+    summarise("NtRNA"=n())
+```
+
+
+```{r, fig.width = 8, fig.height = 4.5}
+NtRNAbyCodon <- 
+tRNA %>% 
+	group_by(codon) %>% 
+	summarise("NtRNA"=n())
+
+
+codonUsageFreqNtRNA <- 
+inner_join(
+	AAUsageFreqHuman %>% group_by(codon),
+	NtRNAbyCodon %>% select(codon,NtRNA),
+	by="codon"
+)
+
+codonUsageFreqNtRNAplot <- 
+ggplot(codonUsageFreqNtRNA,aes(countPerThousand,NtRNA)) +
+	geom_label(aes(label=codon,fill=aa),size=4,colour="white",alpha=0.8) +
+	scale_fill_manual(values = palette) +
+	geom_smooth(method = "lm",se=FALSE) +
+	labs(	x = "Codon Usage / count per thousand",
+			y = "Number of tRNA genes"
+	) + 
+	guides(fill=guide_legend(title="Amino Acid")) + 
+	geom_text(x=35,y=17,
+			label=paste0(	'italic(r)~',
+							'"="~',
+							sprintf("%0.2f",
+								round((cor(codonUsageFreqNtRNA$countPerThousand,codonUsageFreqNtRNA$NtRNA)),
+								digits = 2))
+							),
+			parse = TRUE
+	)
+
+codonUsageFreqNtRNAplot
+
+#ggsave(codonUsageFreqNtRNAplot,filename = "graphics/codonUsageFreqNtRNAplot.png",width=8,height=4.5)
+```
+
+```{r}
+codonUsageVsNtRNA <- lm(codonUsageFreqNtRNA$countPerThousand~codonUsageFreqNtRNA$NtRNA)
+codonUsageVsNtRNA %>% summary()
+
+model <- left_join(
+	augment(codonUsageVsNtRNA) %>%
+		rename(
+			"countPerThousand" = "codonUsageFreqNtRNA.countPerThousand",
+			"NtRNA" = "codonUsageFreqNtRNA.NtRNA"
+		),
+	codonUsageFreqNtRNA,
+	by=c("countPerThousand","NtRNA")
+)
+```
+
+```{r}
+meanMethBycodon <- tRNAprobesMethData %>% 
+	group_by(codon) %>% 
+	summarise(beta=mean(beta)) %>% 
+	mutate(codon=revTrans(codon))
+```
+
+```{r, fig.width = 12, fig.height = 6.75}
+modelMeanMeth <- left_join(model,meanMethBycodon,by="codon")
+modelMeanMeth
+
+FetalMeanMethVsCodonUsageNtRNAGap <- 
+modelMeanMeth %>%
+	ggplot(aes(.resid,beta)) + 
+		geom_label(aes(label=codon,fill=aa),size=4,colour="white",alpha=0.8) +
+		scale_fill_manual(values = palette) +
+		geom_smooth(method="lm") +
+		labs(	title="Fetal tissue tRNA methylation",
+				subtitle = "Relationship of methylation level to 'gap' between tRNA gene number and usage frequency",
+				x = "Residuals from: Codon Usage Count ~ Number of tRNA genes",
+				y = "Mean methylation across probes in tRNA genes /proportion methylated"
+		)+
+		guides(fill=guide_legend(title="Amino Acid")) + 
+		geom_text(x=10,y=0.6,
+				label=paste0(	'italic(R^2)~',
+								'"="~',
+								sprintf("%0.2f",
+									round(glance(codonUsageVsNtRNA)$r.squared,
+									digits = 4))
+								),
+				parse = TRUE
+		)
+
+# FetalMeanMethVsCodonUsageNtRNAGap %>% 
+# 	ggsave(filename = "../graphics/FetalMeanMethVsCodonUsageNtRNAGap.png",
+# 		width = 12,
+# 		height = 6.75
+# 	)
+
+FetalMeanMethVsCodonUsageNtRNAGap
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References
+

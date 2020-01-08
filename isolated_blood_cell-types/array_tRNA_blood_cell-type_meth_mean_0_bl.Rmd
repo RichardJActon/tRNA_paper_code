@@ -1,0 +1,518 @@
+---
+title: "tRNA array blood cell-type meth"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+    keep_md: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+#runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+  getRaw: FALSE
+---
+
+# Introduction
+
+Looking for blood cell-type specific DNAm patterns in tRNA genes.
+
+Data from: [GSE35069](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE35069) [@Reinius2012]
+
+> Six healthy male blood donors, age 38 ± 13.6 years, were included in the study. From each individual, global DNA methylation levels were analyzed in whole blood, peripheral blood mononuclear cells (PBMC) and granulocytes as well as for seven isolated cell populations (CD4+ T cells, CD8+ T cells, CD56+ NK cells, CD19+ B cells, CD14+ monocytes, neutrophils, and eosinophils), n=60 samples analyzed in total.
+
+# Set-up
+
+## Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(magrittr)
+	library(tidyverse)
+	library(here)
+	library(Biobase)
+	library(GEOquery)
+	library(ComplexHeatmap)
+})
+```
+
+## Env
+
+```{r setup}
+if(!dir.exists("data")) {
+	dir.create("data")
+}
+if(!dir.exists("graphics")) {
+	dir.create("graphics")
+}
+```
+
+# Data Read-in
+
+```{r}
+bltRNAs <- read_tsv(
+	"../tRNA-GtRNAdb/tRNAs-in-hg19-blacklist-v2.txt",
+	col_names = "tRNAname",
+	col_types = "c"
+) %>% pull()
+```
+
+```{r}
+tRNAprobes <- 
+read_tsv(
+	"../tRNA-GtRNAdb/450k_coresponding_hg19tRNAs.bed",
+	col_names = c(
+		"chr","start","end","probe",
+		read_tsv(
+			"../tRNA-GtRNAdb/std_tRNA_header.txt",
+			col_types = cols(.default = col_character())
+		) %>% colnames()
+	)
+)
+
+tRNAprobes %>% nrow()
+```
+
+```{r}
+tRNAprobes <- tRNAprobes %>% filter(!tRNAname %in% bltRNAs)
+tRNAprobes %>% nrow()
+```
+
+```{r}
+tRNAgeBB <- read_delim(
+	delim = "\t",
+	 col_names = "tRNAname",
+	 col_types = "c",
+	 file = "../tRNA-GtRNAdb/BB_GWS_tRNA.txt"
+) %>%
+	pull()
+```
+
+```{r}
+swsBB23 <- read_delim(
+	delim = "\t",
+	col_names = "tRNAname",
+	col_types = "c",
+	file = "../tRNA-GtRNAdb/swsBB23.tsv"
+) %>%
+	pull()
+```
+
+```{r}
+swsBB23bl <- swsBB23[!swsBB23 %in% bltRNAs]
+```
+
+```{r, eval = params$getRaw}
+ctmeth <- GEOquery::getGEO("GSE35069")[[1]]
+```
+
+# pre-processing
+
+```{r, eval = params$getRaw}
+metadata <- ctmeth %>% pData()
+#metadata
+```
+
+```{r, eval = params$getRaw}
+meth <- exprs(ctmeth)
+tRNAmeth <- meth[rownames(meth) %in% tRNAprobes$probe,]
+```
+
+```{r, eval = params$getRaw}
+rm(ctmeth)
+gc()
+```
+
+```{r, eval = params$getRaw}
+saveRDS(
+	metadata,
+	"data/metadata_bl.Rds"
+)
+saveRDS(
+	tRNAmeth,
+	file = "data/tRNAmeth_bl.Rds"
+)
+```
+
+```{r}
+metadata <- readRDS(
+	"data/metadata_bl.Rds"
+)
+tRNAmeth<- readRDS(
+	file = "data/tRNAmeth_bl.Rds"
+)
+```
+
+# Summary Info
+
+Data processing: `r metadata$data_processing[1]`
+
+Cell categories
+
+```{r}
+metadata %>%
+	distinct(source_name_ch1)
+```
+Three categories: `r paste0(unique(metadata$source_name_ch1)[1:3],collapse = ", ")` have other cell-types on this list within them.
+
+Methylation data available for `r nrow(tRNAmeth)` out of `r nrow(tRNAprobes)` probes, covering `r tRNAprobes %>% filter(probe %in% rownames(tRNAmeth)) %>% distinct(tRNAname) %>% nrow()` tRNAs. (Including `r tRNAprobes %>% filter(probe %in% rownames(tRNAmeth)) %>% distinct(tRNAname) %>% filter(tRNAname %in% tRNAgeBB) %>% nrow()` of the top `r length(tRNAgeBB)` from the MeDIP-seq).
+
+```{r}
+myeloidLymphoid <- data.frame(
+	source_name_ch1 = unique(metadata$source_name_ch1),
+	myeloidLymphoid = c(NA,"lymphoid","myeloid","lymphoid","lymphoid","myeloid","lymphoid","lymphoid","myeloid","myeloid")
+)
+
+metadata <- metadata %>%
+	left_join(
+		myeloidLymphoid,
+		by = "source_name_ch1"
+	)
+```
+
+## tRNA methylation density
+
+```{r}
+tRNAmeth %>% 
+	as.data.frame() %>%
+	rownames_to_column(var = "probe") %>%
+	gather(-probe,key = "probe",value = "meth") %>%
+	ggplot(aes(meth)) + 
+	geom_density(aes(colour = probe),show.legend = FALSE)
+```
+
+# Plotting functions
+
+Ensembl methylation colours
+
+```{r}
+col_fun <- circlize::colorRamp2(c(0, 0.5, 1), c("#ffff00", "#19ff00", "#0033cc"))
+```
+
+# initial inspection
+
+```{r,fig.width=16,fig.height=20}
+ComplexHeatmap::Heatmap(
+	tRNAmeth,
+	bottom_annotation = HeatmapAnnotation(type = metadata$`tissue/cell type:ch1`)
+)
+```
+
+# Median meth by tRNA - all cell categories
+
+```{r}
+meanMethbytRNA <- 
+tRNAmeth %>% 
+	as.data.frame() %>%
+	rownames_to_column(var = "probe") %>%
+	left_join(tRNAprobes %>% select(tRNAname,probe),by = "probe") %>%
+	group_by(tRNAname) %>%
+	#summarise_if(is.double,median) %>%
+	summarise_if(is.double,mean) %>%
+	set_colnames(c("name",metadata$title)) %>%
+	as.data.frame() %>%
+	set_rownames(.$name) %>%
+	select(-name)
+	
+meanMethbytRNAMat <- data.matrix(meanMethbytRNA) 
+colnames(meanMethbytRNAMat) <- metadata$title
+
+#meanMethbytRNAMat
+```
+
+```{r}
+meanMethbytRNA %>% nrow()
+meanMethbytRNA[!rownames(meanMethbytRNA) %in% bltRNAs,] %>% nrow()
+```
+
+```{r,fig.width=9,fig.height=12}
+set.seed(42)
+meanMethbytRNAMatHeatmap <- 
+meanMethbytRNAMat %>%
+ComplexHeatmap::Heatmap(
+	.,
+	bottom_annotation = HeatmapAnnotation(
+		#"Cell-type" = metadata$`tissue/cell type:ch1`#,
+		"Cell-type" = metadata$source_name_ch1,
+		"Lineage" = metadata$myeloidLymphoid
+		# annotation_legend_param = list(
+		# #	"Cell-type" = list(
+		# 		
+		# 	)
+		# #)
+	),
+	#annotation_legend_size()
+	#annotation_legend_side = "bottom",
+	#heatmap_legend_side = "bottom",
+	#Legend(ncol = 1,title = "LEGEND"),
+	
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Mean methylation by tRNA\nSorted Blood Cell-types (GSE35069)",
+	name = "Meth",
+	#column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 5),
+	row_names_gp = gpar(
+		fontsize = 5,
+		col = if_else(rownames(.) %in% swsBB23bl,"red","black")#tRNAgeBB
+	),
+	col = col_fun,
+	row_title = "tRNA gene",
+	na_col = "grey",
+	#packLegend(heatmap_legend,"Cell-type",direction = "horizontal")
+	#heatmap_legend_param = list(at = c(-2, 0, 2))
+	
+	# heatmap_width = unit(8.5,"inches"),
+	# heatmap_height = unit(11.6,"inches")
+)
+
+meanMethbytRNAMatHeatmap
+```
+
+```{r}
+png(
+	filename = "./graphics/meanMethbytRNAMatHeatmap_bl.png",
+	width = 9, height = 12, units = "in", res = 384
+)
+meanMethbytRNAMatHeatmap
+dev.off()
+```
+
+# Median meth by tRNA - low level cell-categories
+
+## filtering higher level groups
+
+```{r}
+metadataLow <- 
+metadata %>%
+	filter(!source_name_ch1 %in% c("Whole blood","PBMC","Granulocytes"))
+
+tRNAmethLow <- tRNAmeth[,metadataLow$geo_accession]
+```
+
+```{r}
+meanMethbytRNALow <- 
+tRNAmethLow %>% 
+	as.data.frame() %>%
+	rownames_to_column(var = "probe") %>%
+	left_join(tRNAprobes %>% select(tRNAname,probe),by = "probe") %>%
+	group_by(tRNAname) %>%
+	#summarise_if(is.double,median) %>%
+	summarise_if(is.double,mean) %>%
+	set_colnames(c("name",metadataLow$title)) %>%
+	as.data.frame() %>%
+	set_rownames(.$name) %>%
+	select(-name)
+	
+meanMethbytRNAMatLow <- data.matrix(meanMethbytRNALow) 
+colnames(meanMethbytRNAMatLow) <- metadataLow$title
+
+#meanMethbytRNAMat
+```
+
+```{r,fig.width=9,fig.height=12}
+set.seed(42)
+meanMethbytRNAMatHeatmapLow <- 
+meanMethbytRNAMatLow %>%
+ComplexHeatmap::Heatmap(
+	.,
+	bottom_annotation = HeatmapAnnotation(
+		#"Cell-type" = metadata$`tissue/cell type:ch1`#,
+		"Cell-type" = metadataLow$source_name_ch1,
+		"Lineage" = metadataLow$myeloidLymphoid
+		# annotation_legend_param = list(
+		# #	"Cell-type" = list(
+		# 		
+		# 	)
+		# #)
+	),
+	#annotation_legend_size()
+	#annotation_legend_side = "bottom",
+	#heatmap_legend_side = "bottom",
+	#Legend(ncol = 1,title = "LEGEND"),
+	
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Mean methylation by tRNA\nSorted Blood Cell-types (GSE35069)",
+	name = "Meth",
+	#column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 5),
+	row_names_gp = gpar(
+		fontsize = 5,
+		col = if_else(rownames(.) %in% swsBB23bl,"red","black")#tRNAgeBB
+	),
+	col = col_fun,
+	row_title = "tRNA gene",
+	na_col = "grey",
+	#packLegend(heatmap_legend,"Cell-type",direction = "horizontal")
+	#heatmap_legend_param = list(at = c(-2, 0, 2))
+	
+	# heatmap_width = unit(8.5,"inches"),
+	# heatmap_height = unit(11.6,"inches")
+)
+
+meanMethbytRNAMatHeatmapLow
+```
+
+```{r}
+png(
+	filename = "./graphics/meanMethbytRNAMatHeatmapLow_bl.png",
+	width = 9, height = 12, units = "in", res = 384
+)
+meanMethbytRNAMatHeatmapLow
+dev.off()
+```
+
+```{r,fig.width=7,fig.height=4}
+set.seed(42)
+meanMethbytRNAMatLowBB6 <- 
+meanMethbytRNAMatLow[rownames(meanMethbytRNAMatLow) %in% swsBB23,] %>%
+ComplexHeatmap::Heatmap(
+	.,
+	bottom_annotation = HeatmapAnnotation(
+		"Cell-type" = metadataLow$source_name_ch1,
+		"Lineage" = metadataLow$myeloidLymphoid
+	),
+	column_title_gp = gpar(fontsize = 12, fontface = "bold"),
+	column_title = "Mean methylation by tRNA\nSorted Blood Cell-types (GSE35069)",
+	name = "Meth",
+	#column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 6),
+	row_names_gp = gpar(
+		fontsize = 8#,
+		#col = if_else(rownames(.) %in% tRNAgeBB,"red","black")
+	),
+	col = col_fun,
+	row_title = "tRNA gene",
+	na_col = "grey",
+)
+meanMethbytRNAMatLowBB6
+```
+
+```{r}
+png(
+	filename = "./graphics/meanMethbytRNAMatLowBB6_bl.png",
+	width = 7, height = 4, units = "in", res = 384
+)
+meanMethbytRNAMatLowBB6
+dev.off()
+```
+
+```{r,fig.height=10,fig.width=5}
+varBytRNA <- apply(meanMethbytRNAMatLow,1,var,na.rm = TRUE) %>%
+	enframe(name = "tRNAname", value = "variance") %>%
+	arrange(desc(variance)) %>%
+	mutate(tRNAname = factor(tRNAname,levels = rev(tRNAname), ordered = TRUE)) %>%
+	mutate(tRNAge = tRNAname %in% swsBB23)
+varBytRNA
+
+varBytRNA %>%
+	head(30) %>%
+ggplot(aes(tRNAname,variance)) + 
+	geom_col(aes(fill = tRNAge)) + 
+	coord_flip()
+```
+
+# Are the tRNAge genes significantly different in methylation between myeloid and lymphoid
+
+```{r}
+meanMethbytRNAMatLowLong <- 
+meanMethbytRNAMatLow[,as.character(metadataLow$title)] %>%
+	as.data.frame() %>%
+	rownames_to_column(var = "tRNAname") %>%
+	gather(-tRNAname,key = "title",value = "meth") %>%
+	left_join(
+		metadata %>% select(title,myeloidLymphoid),
+		by = "title"
+	)
+
+meanMethbytRNAMatLowLong %>%
+	group_by(myeloidLymphoid) %>%
+	summarise(
+		mean = mean(meth,na.rm = TRUE),
+		median = median(meth,na.rm = TRUE)
+	) %>%
+	mutate(meanDiff = mean - lag(mean)) %>%
+	mutate(medianDiff = median - lag(median))
+```
+
+```{r}
+wt <- wilcox.test(
+	meth ~ myeloidLymphoid,
+	data = meanMethbytRNAMatLowLong,
+	alternative = "greater",
+	correct = FALSE,
+	conf.int = TRUE
+)
+#summary(wt)
+wt
+```
+
+```{R}
+sprintf("%.2e", wt$p.value)
+
+wt$conf.int
+
+wt$estimate*100
+```
+
+```{r}
+meanMethbytRNAMatLowLongBBAge <- 
+meanMethbytRNAMatLowLong %>% filter(tRNAname %in% swsBB23) #tRNAgeBB
+
+meanMethbytRNAMatLowLongBBAge %>%
+	group_by(myeloidLymphoid) %>%
+	summarise(
+		mean = mean(meth,na.rm = TRUE),
+		median = median(meth,na.rm = TRUE)
+	) %>%
+	mutate(meanDiff = mean - lag(mean)) %>%
+	mutate(medianDiff = median - lag(median))
+```
+
+```{r}
+wtBBage <- wilcox.test(
+	meth ~ myeloidLymphoid,
+	data = meanMethbytRNAMatLowLongBBAge,
+	alternative = "greater",
+	correct = FALSE,
+	conf.int = TRUE
+)
+#summary(wt)
+wtBBage
+```
+
+```{R}
+sprintf("%.2e", wtBBage$p.value)
+
+wtBBage$conf.int
+
+wtBBage$estimate
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>

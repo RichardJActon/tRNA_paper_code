@@ -1,0 +1,276 @@
+---
+title: "tRNAmappability_1"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+    keep_md: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+#runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+---
+
+# Introduction
+
+# Set-up
+
+## Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(here)
+	library(rtracklayer)
+	library(GenomicRanges)
+	library(plyranges)
+	library(future.apply)
+})
+```
+
+## Env
+
+```{r}
+plan(multisession, workers = 4)
+```
+
+# Data Read-in
+
+```{r}
+tRNAsGR <- rtracklayer::import.bed(
+	"../tRNA-GtRNAdb/hg19-tRNAs.bed",
+	genome = "hg19"
+)
+```
+
+```{r}
+tracks <- c(
+	"wgEncodeDukeMapabilityUniqueness35bp",
+	"wgEncodeDukeMapabilityUniqueness20bp",
+	"wgEncodeCrgMapabilityAlign24mer",
+	"wgEncodeCrgMapabilityAlign36mer",
+	"wgEncodeCrgMapabilityAlign40mer",
+	"wgEncodeCrgMapabilityAlign50mer",
+	"wgEncodeCrgMapabilityAlign75mer",
+	"wgEncodeCrgMapabilityAlign100mer"
+)
+```
+
+```{r}
+dir <- tempdir() #  "/home/richardjacton/tmp/Rtmp3feya4"
+trackFiles <- future_lapply(tracks, function(track){
+	dest <- normalizePath(paste0(dir,"/",track,".bigwig"))
+	if(!file.exists(dest)){
+		download.file(
+			paste0(
+				"https://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeMapability/",
+				track, ".bigWig"
+			),
+			destfile = dest
+		)
+	}
+	dest
+})
+
+#wget http://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeMapability/wgEncodeDukeMapabilityUniqueness35bp.bigWig
+```
+
+```{r}
+#dir <- "/home/richardjacton/tmp/Rtmp3feya4"
+#trackFiles <- paste0(dir,"/",tracks,".bigwig")
+trackFiles <- list.files(dir, pattern = "\\.bigwig", full.names = TRUE)
+```
+
+```{r}
+importSubset <- function(trackFiles, GR) {
+	res <- lapply(trackFiles, function(file) {
+		rtracklayer::import.bw(
+			file, selection = rtracklayer::BigWigSelection(ranges = GR)
+		)
+	})
+	names(res) <- gsub(
+		trackFiles, pattern = ".*Mapability(\\w+)\\.bigwig", replacement = "\\1"
+	)
+	return(res)
+}
+```
+
+```{r}
+tRNAsGR500bpf <- 
+	tRNAsGR %>% anchor_3p() %>% stretch(500) %>% anchor_5p() %>% stretch(500) 
+	#%>% width()
+```
+
+```{r}
+tRNAsMappability <- importSubset(trackFiles, tRNAsGR)
+tRNAsMappabilityFlank <- importSubset(trackFiles, tRNAsGR500bpf)
+```
+
+```{r}
+getDensity <- function(mappa,GR){
+	join_overlap_inner(
+		mappa,
+		GR %>% select(-score)
+	) %>%
+		#filter(name %in% tRNAsGR$name) %>%
+		as_tibble() %>%
+		mutate(score = score * width) %>%
+		group_by(name) %>%
+		summarise(density = sum(score)/(max(end) - min(start))
+	)
+}
+```
+
+```{r}
+getDensities <- function(mappa,GR){
+	tmps <- future_sapply(
+		names(mappa),
+		function(x){
+			getDensity(mappa[[x]],GR = GR) %>% mutate(track = x)
+		},
+		simplify = FALSE,USE.NAMES = TRUE
+	)
+	bind_rows(tmps)
+}
+```
+
+```{r}
+tRNADensities <- getDensities(tRNAsMappability,tRNAsGR)
+```
+
+```{r}
+tRNAFlankDensities <- getDensities(tRNAsMappabilityFlank,tRNAsGR500bpf)
+```
+
+arrange tracks
+
+```{r}
+orderedTracks <- 
+tRNAFlankDensities %>% 
+	distinct(track) %>% 
+	extract(
+		track,
+		into = c("pre","num"),
+		regex = "(\\w+?)(\\d+).*",
+		remove = FALSE,
+		convert = TRUE
+	) %>% 
+	arrange(pre,num) %>%
+	pull(track)
+orderedTracks
+```
+
+```{r}
+combinedDensities <- 
+bind_rows(
+	tRNAFlankDensities %>% mutate(type = "flank"),
+	tRNADensities %>% mutate(type = "tRNA")
+) %>% 
+	mutate(track = factor(track,ordered = TRUE, levels = orderedTracks))
+```
+
+```{r}
+if(!dir.exists("out")) {
+	dir.create("out", showWarnings = FALSE, recursive = TRUE)
+}
+
+write_tsv(
+	combinedDensities,
+	path = "out/combinedDensities.tsv"
+)
+```
+
+```{r}
+combinedDensities <- 
+read_tsv(
+	file = "out/combinedDensities.tsv",
+	col_types = "cdcc"
+)
+```
+
+```{r}
+#ggplot(aes(start,score)) + geom_area() #+ lims(y=c(0,1))
+```
+
+```{r, fig.width = 6, fig.height = 6}
+densityPlots <- 
+combinedDensities %>%
+	ggplot(aes(density)) + 
+		geom_density(aes(colour = type)) + 
+		facet_wrap(~track, scales = "free") + 
+		labs(
+			title = "tRNA mappability",
+			subtitle = "tRNA region only Vs tRNA +/- 500bp",
+			x = "Mappability Score Density",
+			caption = "Mappability Score Density = total score / length of region"
+		) + theme_bw()
+
+densityPlots
+```
+
+```{r}
+if(!dir.exists("graphics")) {
+	dir.create("graphics", showWarnings = FALSE, recursive = TRUE)
+}
+ggsave(
+	plot = densityPlots,
+	filename = "graphics/mappabilityScoreDensity_tRNAVsFlank500.png",
+	width = 6,
+	height = 6
+)
+```
+
+```{r}
+combinedDensities %>%
+	group_by(track,type) %>%
+	summarise(median = median(density))
+```
+
+```{r}
+combinedDensities %>%
+	group_by(track,type) %>%
+	summarise(median = median(density)) %>%
+	filter(track == "Align50mer")
+```
+
+```{r}
+wt <- 
+wilcox.test(
+	density ~ type,
+	data = combinedDensities %>% filter(track == "Align50mer"),
+	conf.int = TRUE,
+	alternative = "greater",
+	correct = FALSE
+)
+wt
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>

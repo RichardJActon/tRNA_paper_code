@@ -1,0 +1,1405 @@
+---
+title: "EpiTwins 450k arrays - Blood"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+---
+
+# Summary
+
+```{r}
+if(!dir.exists("out")) {
+	dir.create("out", showWarnings = FALSE, recursive = TRUE)
+}
+if(!dir.exists("graphics")) {
+	dir.create("graphics", showWarnings = FALSE, recursive = TRUE)
+}
+```
+
+# Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(broom)
+	library(minfi)
+	library(DNAmAgeMini)
+	library(plotly)
+	library(EpiDISH)
+	library(meffil)
+	library(ggrepel)
+	library(patchwork)
+	library(fst)
+})
+```
+
+```{r}
+nest <- nest_legacy
+unnest <- unnest_legacy
+```
+
+# Data read-in
+
+## Loading array Betas
+
+```{r, eval=FALSE}
+load(
+	file = "../data_gitIg/Blood/bmiqbeta_goodprobes_877.RData" ## Data on request
+)
+bmiqbeta_goodprobes_877 <- as.data.frame(bmiqbeta_goodprobes_877)
+dim(bmiqbeta_goodprobes_877)
+
+fst::write.fst(
+	bmiqbeta_goodprobes_877 %>% rownames_to_column(var = "probe"),
+	"../data_gitIg/Blood/bmiqbeta_goodprobes_877.fst"
+)
+```
+
+```{r}
+bmiqbeta_goodprobes_877 <- fst::read_fst("../data_gitIg/Blood/bmiqbeta_goodprobes_877.fst")
+```
+
+## loading metatdata
+
+betas with corresponding metadata
+
+```{r}
+# Get KCLids
+IDmap <- read.table(
+	"../data_gitIg/Blood/fakeid_key_877.txt", ## Data on request
+	header = TRUE
+)
+```
+
+```{r, eval=FALSE}
+identical(
+	as.character(IDmap$Basename),
+	colnames(bmiqbeta_goodprobes_877)[-1]
+)
+
+colnames(bmiqbeta_goodprobes_877) <- c("probe", IDmap$KCLid)
+
+#bmiqbeta_goodprobes_877$probe <- rownames(bmiqbeta_goodprobes_877)
+```
+
+```{r}
+# Cross-ref KCLids with sample data from meDIP-seq
+metadataComplete <- read.table(
+	"../../EpiTwin/metadata/Extended_sample_data_new_ages.txt", ## Data on request
+	header = TRUE
+)
+```
+
+## load tRNA info
+
+```{r}
+# probes in tRNAs
+probesIntRNAs <- read.table(
+	"../cgIn-tRNAs_full.bed",
+	stringsAsFactors = FALSE
+)
+
+colnames(probesIntRNAs) <- c(
+	as.character(
+		read.table(
+			"../tRNA-GtRNAdb/std_tRNA_header.txt",
+			stringsAsFactors = FALSE
+		)
+	),
+	"pChr","pStart","pEnd","probe"
+)
+#probesIntRNAs$probe <- as.character(probesIntRNAs$probe)
+length(probesIntRNAs$probe)
+```
+
+```{r}
+zhougoodProbes <- 
+readr::read_tsv("../tRNA-GtRNAdb/450k_hg19tRNAs_Zhou_manifest.bed") %>%
+	dplyr::filter(MASK_general == FALSE) %>%
+	dplyr::pull(probeID)
+
+zhougoodProbes
+```
+
+## !! Zhou filter !!
+
+```{r}
+# probesIntRNAs <- probesIntRNAs %>% 
+# 	dplyr::filter(probe %in% zhougoodProbes)
+# 
+# probesIntRNAs %>% nrow()
+```
+
+```{r}
+meDIPseqGWStRNAs <- 
+as.character(
+	unlist(
+		read.table(
+			"../tRNA-GtRNAdb/GenWideSigWintRNAs.txt",
+			stringsAsFactors = FALSE
+		)
+	)
+)
+meDIPseqGWStRNAs
+```
+
+```{r}
+meDIPseqGWStRNAsBB <- 
+as.character(
+	unlist(
+		read.table(
+			"../tRNA-GtRNAdb/BB_GWS_tRNA.txt",
+			stringsAsFactors = FALSE
+		)
+	)
+)
+meDIPseqGWStRNAsBB
+```
+
+```{r}
+swsBB23 <- read_tsv(
+	"../tRNA-GtRNAdb/swsBB23.tsv",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+swsBB23
+```
+
+```{r}
+bltRNAs <- read_tsv(
+	"../tRNA-GtRNAdb/tRNAs-in-hg19-blacklist-v2.txt",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+# bltRNAs
+```
+
+```{r}
+swsBB23bl <- swsBB23[!swsBB23 %in% bltRNAs]
+swsBB23bl
+```
+
+# Data pre-processing
+
+```{r}
+metadata <- metadataComplete[metadataComplete$KCLid %in% IDmap$KCLid,]
+nrow(metadata)
+
+# No missing ages
+metadata %>%
+	drop_na(ageDNAextraction) %>%
+	nrow()
+# potentially ambigious ages
+metadata %>% 
+	group_by(KCLid) %>% 
+	filter(n()<2) %>% 
+	nrow()
+
+metadataDD <- metadata %>% 
+	group_by(KCLid) %>% 
+	filter(min(ageDNAextraction)==max(ageDNAextraction)) %>% 
+	distinct(KCLid,.keep_all = TRUE) 
+
+metadataDD %>% 
+	nrow()
+
+#metadataByKCLid <- metadataDD %>% group_by(KCLid) %>% nest() %>% arrange(KCLid)
+metadataByKCLid <- metadataDD %>% arrange(KCLid)
+```
+
+```{r}
+metadataByKCLid$ageDNAextraction %>% range()
+
+metadataByKCLid %>% 
+	mutate(SEX = as.character(SEX)) %>% 
+	group_by(SEX) %>% 
+	dplyr::summarise(n=n())
+```
+
+NB some KCLids occur multiple times in the meDIP-seq sample data as many are longitudinals, __i'm operating under the assumption that these arrays were done on blood extracted at the same time as the meDIP-seq__ I've excluded all the duplicates as this point in time as I can't determine at which time-point the array was done.
+
+```{r}
+metadataNot <- metadataComplete[
+	!(metadataComplete$BGIid %in% metadata$BGIid),
+]
+
+metadataNotDat <- 
+metadataNot %>% 
+	dplyr::select(
+		BGIid,KCLid,KCLfam,ageDNAextraction,SEX,ACTUAL_ZYGOSITY,
+		eosinophils:neutrophils,abs_blooddiff,readcount
+	) %>%
+	na.omit() 
+
+metadataNotDat %>% nrow()
+
+metadataNotDat %>% pull(KCLfam) %>% unique() %>% length()
+```
+
+This leaves 587 arrays with unique metadata
+
+## Selecting samples
+
+some missing Infinite or NAN values present...
+
+```{r, eval=FALSE}
+fst::write.fst(
+	bmiqbeta_goodprobes_877[,c("probe", as.character(metadataByKCLid$KCLid))],
+	"out/betasM.fst"
+)
+# betasM <- data.matrix(
+# 	bmiqbeta_goodprobes_877[,as.character(metadataByKCLid$KCLid)]
+# )
+rm(bmiqbeta_goodprobes_877)
+gc()
+#df[Reduce(`&`, lapply(df, is.finite)),]
+#betasMf <- betasM[Reduce(`&`, lapply(betasM, is.finite)),]
+# betasM <- data.matrix(
+# 	bmiqbeta_goodprobes_877[
+# 		Reduce(`&`, lapply(bmiqbeta_goodprobes_877, is.finite)),
+# 	]
+# )
+```
+
+```{r, eval=FALSE}
+#saveRDS(betasM, "~/Documents/PhD_Stuff/phd/Projects/tRNA_Stuff/Array/out/betasM.Rds")
+#fst::write.fst(betasM, "~/Documents/PhD_Stuff/phd/Projects/tRNA_Stuff/Array/out/betasM.fst")
+```
+
+```{r}
+#betasM <- readRDS("~/Documents/PhD_Stuff/phd/Projects/tRNA_Stuff/Array/out/betasM.Rds")
+betasM <- fst::read_fst("out/betasM.fst") %>%
+#betasM %>%
+	as.data.frame(row.names = .$probe) %>%
+	dplyr::select(-probe) %>% 
+	data.matrix()
+```
+
+## getting sell-count estimates
+
+### houseman (meffil)
+
+```{r, eval = FALSE}
+cellcounts <- meffil.estimate.cell.counts.from.betas(
+	betasM,
+	cell.type.reference = "blood gse35069 complete",
+	verbose = TRUE
+)
+cellcounts <- data.frame(IID = row.names(cellcounts),cellcounts)
+gc()
+```
+
+```{r, eval = FALSE}
+metadataByKCLid <- 
+metadataByKCLid %>%
+	left_join(
+		cellcounts %>% 
+			dplyr::rename(KCLid = IID) %>%
+			mutate(KCLid = as.integer(KCLid)),
+		by = "KCLid"
+	) %>% mutate(KCLid = as.character(KCLid))
+```
+
+### EpiDISH
+
+```{r, eval = FALSE}
+#library(EpiDISH)
+data(centDHSbloodDMC.m)
+bloodRef1 <- centDHSbloodDMC.m[,c(1:4,6:8)] #B-cells, CD4+ T-cells, CD8+ T-cells, NK-cells, Monocytes, Neutrophils and Eosinophils and not Granulocytes as made up of Neutrophils and Eosinophils)
+
+#colnames(betasM) <- make.names(colnames(betasM))
+#betasM %>% na.omit()
+epiDISHres <- epidish(betasM, bloodRef1, method = "RPC")
+#epiDISHres$estF 
+#colnames(epiDISHres$estF) <- paste0("EpiDISH_", colnames(epiDISHres$estF))
+EpiDISHcellTypeCounts <- epiDISHres$estF %>% 
+	as.data.frame() %>% 
+	rownames_to_column(var="KCLid") %>%
+	rename(eosinophils = Eosino, neutrophils = Neutro, monocytes = Mono) %>%
+	mutate(type = "epiDISH")
+
+predVsMeasuredCellCounts <- 
+bind_rows(
+	EpiDISHcellTypeCounts %>% 
+		filter(KCLid %in% metadata$KCLid) %>%
+		select(KCLid,eosinophils,monocytes,neutrophils),
+	metadata %>%
+		mutate(type = "Cell Count") %>%
+		select(KCLid,eosinophils,monocytes,neutrophils),
+	by = "KCLid"
+)
+#betasM[1:10,1:10]
+```
+
+### EpiTwins blood counts
+
+Excluding samples without blood count data
+
+```{r, eval=FALSE}
+metadataDDbc <- metadataDD %>%
+drop_na(
+	eosinophils, lymphocytes, monocytes, neutrophils, abs_blooddiff
+) #,readcount
+metadataDDbc %>% nrow()
+```
+
+## Get tRNA probe betas
+
+```{r}
+availProbes <- rownames(betasM)
+
+tRNAprobes <- betasM[
+	availProbes[availProbes %in% probesIntRNAs$probe],
+]
+
+tRNAprobes %>% dim()
+tRNAprobes %>% na.omit() %>% dim()
+```
+
+```{r, eval=FALSE}
+tRNAprobes <- 
+	betasM %>%
+	#data.matrix() %>%
+	as.data.frame() %>%
+	rownames_to_column("probe") %>%
+	dplyr::filter(probe %in% probesIntRNAs$probe) %>% 
+	filter_all(any_vars(!is.na(.)))
+
+nrow(tRNAprobes)
+```
+
+213 probe which overlap tRNA genes
+
+158 of the 213 tRNA probes have data.
+
+```{r}
+probesIntRNAs %>% nrow()
+```
+
+```{r}
+probesIntRNAs %>% 
+	filter(probe %in% availProbes) %>%
+	nrow()
+```
+
+```{r}
+probesIntRNAs %>% 
+	filter(probe %in% availProbes) %>%
+	filter(!tRNAname %in% bltRNAs) %>% 
+	nrow()
+```
+
+```{r}
+probesIntRNAs_avail_BL <- 
+probesIntRNAs %>% 
+	filter(probe %in% availProbes) %>%
+	filter(!tRNAname %in% bltRNAs)
+```
+
+```{r}
+probesIntRNAs_avail_BL %>% 
+	distinct(tRNAname) %>%
+	nrow()
+```
+
+```{r}
+probesIntRNAs_avail_BL %>%
+	filter(tRNAname %in% swsBB23) %>% 
+	distinct(tRNAname) %>%
+	nrow()
+```
+
+```{r}
+probesIntRNAs_avail_BL %>%
+	filter(tRNAname %in% meDIPseqGWStRNAsBB) %>% 
+	distinct(tRNAname) %>%
+	nrow()
+```
+
+# DNAm Age Vs. Chron Age Check
+
+```{r getDNAmAge}
+DNAmAge <- 
+left_join(
+	HorvathAgePred(
+		betasM[
+		#bmiqbeta_goodprobes_877[
+			HorvathCoefficients$probe[-1],
+			as.character(metadataByKCLid$KCLid) #metadata #metadataDDbc
+		]
+	) %>% 
+		enframe() %>%
+		dplyr::rename(KCLid = name, Horvath2013Age = value),
+	metadataByKCLid[,c("ageDNAextraction","KCLid")] %>% #metadata
+		mutate(KCLid = as.character(KCLid)),
+	by = "KCLid"
+)
+```
+
+```{r}
+rm(betasM)
+gc()
+```
+
+```{r plotDNAmAgeVsChronAge,fig.width=7,fig.asp=1}
+AgeChronVsPredH2013Blood <- 
+DNAmAge %>%
+ggplot(aes(ageDNAextraction,Horvath2013Age)) + 
+	geom_point(aes(text = paste0("KCLid: ",KCLid))) + 
+	lims(x = c(25, 95), y = c(25, 95)) +
+	geom_smooth(method = "lm") + 
+	#coord_equal() + 
+	#coord_fixed() +
+	labs(
+		subtitle = bquote(
+			R^2~"=" ~.(
+			sprintf(
+				"%.2f",
+				cor(DNAmAge$Horvath2013Age,DNAmAge$ageDNAextraction)**2)
+			)
+		)
+	)
+
+ggsave(
+	AgeChronVsPredH2013Blood,
+	filename = "graphics/AgeChronVsPredH2013Blood_zhou.png",
+	width = 7, height = 7
+)
+
+AgeChronVsPredH2013Blood# %>% ggplotly(dynamicTicks = TRUE)
+```
+
+# Significance Thresholds
+
+```{r}
+nominalBonfer <- (0.05/nrow(tRNAprobes))
+nominalBonfer
+
+ntRNAstested <- probesIntRNAs %>% 
+	filter(probe %in% availProbes) %>% 
+	filter(!tRNAname %in% bltRNAs) %>%  ########!!!!!!!!!!
+	distinct(tRNAname) %>% 
+	nrow()
+
+ntRNAstested
+
+nominalBonfertRNA <- 0.05 / ntRNAstested
+
+nominalBonfertRNA
+sprintf("%.2e",nominalBonfertRNA)
+```
+
+```{r}
+meDIPseqGWSBBtRNAsOnArray <- 
+probesIntRNAs %>% 
+	filter(tRNAname %in% meDIPseqGWStRNAsBB) %>%
+	dplyr::select(tRNAname) %>%
+	distinct() %>%
+	pull() %>%
+	as.character()
+
+meDIPseqGWStRNAsBB
+
+meDIPseqGWSBBtRNAsOnArray
+```
+
+```{r}
+meDIPseqGWStRNAsOnArray <- 
+probesIntRNAs %>% 
+	filter(tRNAname %in% swsBB23bl) %>%
+	dplyr::select(tRNAname) %>%
+	distinct() %>%
+	pull() %>%
+	as.character()
+
+meDIPseqGWStRNAsOnArray
+```
+
+# Age-linear modeling
+
+```{r}
+summaryStats <- function(x) {
+	data.frame(
+		"min" = min(x),
+		"mean" = mean(x),
+		"max" = max(x),
+		"var" = var(x),
+		"sd" = sd(x)
+	)
+}
+```
+
+## by tRNA
+
+```{r}
+basicAgeModelbytRNA <- 
+tRNAprobes %>%
+	as.data.frame() %>%
+	rownames_to_column(var = "probe") %>%
+	left_join(
+		probesIntRNAs %>% dplyr::select(tRNAname, probe),
+		by = "probe"
+	) %>%
+	gather(key = "KCLid", value = "beta", -tRNAname, -probe) %>%
+	mutate(KCLid = as.integer(KCLid)) %>% ###!!!!######
+	left_join(metadataByKCLid, by = "KCLid") %>%
+	nest(-tRNAname) %>%
+	mutate(
+		model = map(data, ~lm(ageDNAextraction ~ beta, data = .) )
+	) %>%
+	mutate(tidy = map(model, tidy)) %>%
+	unnest(tidy, .drop = FALSE) %>%
+	dplyr::select(-std.error, -statistic, -p.value) %>%
+	spread(term,estimate) %>%
+	mutate(glance = map(model, glance)) %>%
+	unnest(glance) %>%
+	mutate(summaryStats = map(data, ~summaryStats(.x$beta))) %>%
+	unnest(summaryStats) %>%
+	dplyr::select(-model, -data) %>%
+	arrange(p.value) %>%
+	mutate(meDIPseqGWStRNA = tRNAname %in% meDIPseqGWStRNAs) %>%
+	mutate(meDIPseqGWStRNAsBB = tRNAname %in% meDIPseqGWStRNAsBB) %>%
+	mutate(swsBB23bl = tRNAname %in% swsBB23bl)
+
+write_tsv(
+	basicAgeModelbytRNA %>%
+		mutate(nominalSig = p.value < nominalBonfertRNA),
+	path = "out/blood_epitwins450k_basicAgeModelbytRNA_zhou.tsv"
+)
+
+basicAgeModelbytRNA %>%
+	filter(p.value < nominalBonfertRNA)
+```
+
+```{r, fig.width = 7, fig.height = 6}
+basicAgeModelbytRNAPlot <- 
+basicAgeModelbytRNA %>%
+	filter(!tRNAname %in% bltRNAs) %>%
+	left_join(
+		probesIntRNAs %>% 
+			group_by(tRNAname) %>%
+			dplyr::summarise(probes = paste0(probe, collapse = ", ")),
+		by = "tRNAname"
+	) %>%
+	mutate(
+		label = if_else(
+			(p.value < nominalBonfertRNA) | (swsBB23bl), tRNAname, ""
+		)
+	) %>%
+	ggplot(aes(beta,-log10(p.value))) + 
+		geom_point(
+			aes(
+				size = mean,
+				#colour = meDIPseqGWStRNAsBB,
+				colour = swsBB23bl,
+				text = paste0(
+					"probe(s): ",
+					probes,
+					# paste0(probe,collapse = ", "),
+					"\n",
+					"tRNA: ",tRNAname
+				)
+			),
+			alpha = 0.6
+		) +
+		scale_color_manual(values=c("black","red")) +
+		labs(
+			title = "EpiTwins 450K probes over tRNA genes",
+			subtitle = sprintf("p < %.3e", nominalBonfertRNA),
+			caption = "lm(age ~ betas)",
+			#subtitle = "lm(age~betas)",
+			#y = "-log10(p-value)",
+			y=bquote("-log"[10]*'('*italic(p)*'-value)'),
+			x="model slope",
+			size = "Mean Meth"
+		) + 
+		guides(
+			shape = guide_legend(title = "SWS in meDIP-seq"),
+			colour = guide_legend(
+				#title = "BBsig",
+				title = "Study Wide Sig.\nMeDIP-seq\nBlood & Batch"#,
+			)
+		) +
+		geom_text_repel(aes(label = label)) + 
+		geom_hline(yintercept = -log10(nominalBonfertRNA))
+
+#cellTypeCorrectedAgeModelByProbePlot
+basicAgeModelbytRNAPlot
+
+ggsave(
+	basicAgeModelbytRNAPlot,
+	width = 7,
+	height = 6,
+	filename = "graphics/blood_epitwins450k_uncorrected_sws_bl_zhou.png"
+)
+#ggplotly(basicAgeModelbytRNAPlot)
+```
+
+## by tRNA cell-type
+
+```{r}
+selectTidy <- function(model,interest){
+	tidydf <- broom::tidy(model)
+	pval <- tidydf %>%
+		filter(term == interest) %>%
+		pull(p.value)
+	tidydf %>% 
+		dplyr::select(term, estimate) %>%
+		spread(term, estimate) %>%
+		mutate(p.value = pval)
+}
+```
+
+
+```{r, eval = FALSE}
+cellTypeCorrectedAgeModelBytRNA <- 
+tRNAprobes %>%
+	as.data.frame() %>%
+	rownames_to_column(var = "probe") %>%
+	left_join(
+		probesIntRNAs %>% dplyr::select(tRNAname, probe),
+		by = "probe"
+	) %>%
+	gather(key = "KCLid", value = "beta", -tRNAname,-probe) %>%
+	mutate(KCLid = as.integer(KCLid)) %>% ###!!!!######
+	left_join(metadataByKCLid, by = "KCLid") %>%
+	nest(-tRNAname) %>%
+	mutate(
+		model = map(
+			data,
+			~lm(
+				ageDNAextraction ~ 
+					beta + Bcell + CD4T + CD8T + Eos + Mono + Neu + NK,
+				#eosinophils + lymphocytes + monocytes + neutrophils + abs_blooddiff,
+				data = .
+			) 
+		)
+	) %>%
+	#mutate(tidy = map(model, tidy)) %>%
+	mutate(tidy = map(model, ~selectTidy(.x,"beta"))) %>%
+	
+	unnest(tidy, .drop = FALSE) %>%
+	mutate(glance = map(model, glance)) %>%
+	#dplyr::select(-p.value1) %>%
+	unnest(glance) %>%
+	mutate(summaryStats = map(data,~summaryStats(.x$beta))) %>%
+	unnest(summaryStats) %>%
+	dplyr::select(-model,-data) %>%
+	arrange(p.value) %>%
+	mutate(meDIPseqGWStRNA = tRNAname %in% meDIPseqGWStRNAs) %>%
+	mutate(meDIPseqGWStRNAsBB = tRNAname %in% meDIPseqGWStRNAsBB) %>%
+	mutate(swsBB23bl = tRNAname %in% swsBB23bl)
+
+write_tsv(
+	cellTypeCorrectedAgeModelBytRNA %>%
+		mutate(nominalSig = p.value < nominalBonfertRNA),
+	path = "out/blood_epitwins450k_cellTypeCorrectedAgeModelBytRNA_zhou.tsv"
+)
+
+cellTypeCorrectedAgeModelBytRNA %>%
+	filter(p.value < nominalBonfertRNA)
+```
+
+```{r, eval = FALSE}
+cellTypeCorrectedAgeModelBytRNAPlotBase <- 
+cellTypeCorrectedAgeModelBytRNA %>%
+	filter(!tRNAname %in% bltRNAs) %>%
+	left_join(
+		probesIntRNAs %>% 
+			group_by(tRNAname) %>%
+			dplyr::summarise(probes = paste0(probe, collapse = ", ")),
+		by = "tRNAname"
+	) %>%
+	mutate(
+		label = if_else(
+			#(p.value < nominalBonfertRNA) | (meDIPseqGWStRNAsBB), tRNAname, ""
+			(p.value < nominalBonfertRNA) | (swsBB23bl), tRNAname, ""
+		)
+	) %>%
+	ggplot(aes(beta,-log10(p.value))) + 
+		geom_point(
+			aes(
+				size = mean,
+				#colour = meDIPseqGWStRNAsBB,
+				colour = swsBB23bl,
+				text = paste0(
+					"probe(s): ",
+					probes,
+					# paste0(probe,collapse = ", "),
+					"\n",
+					"tRNA: ",tRNAname
+				)
+			),
+			alpha = 0.6
+		) +
+		scale_color_manual(values=c("black","red")) +
+		guides(
+			shape = guide_legend(title = "GWS in meDIP-seq"),
+			colour = guide_legend(
+				#title = "BBsig",
+				title = "Genome Wide Sig.\nMeDIP-seq\nBlood & Batch",
+				subtitletitle = sprintf("p < %.3e", nominalBonfer)
+			)
+		) +
+		geom_text_repel(aes(label = label)) + 
+		geom_hline(yintercept = -log10(nominalBonfertRNA))
+
+	cellTypeCorrectedAgeModelBytRNAPlot <- 
+		cellTypeCorrectedAgeModelBytRNAPlotBase + 
+		labs(
+			title = "EpiTwins 450K probes over tRNA genes",
+			subtitle = sprintf("p < %.3e", nominalBonfertRNA),
+			caption = "lm(age ~ beta + Bcell + CD4T + CD8T + Eos + Mono + Neu + NK)",
+			#subtitle = "lm(age~betas)",
+			#y = "-log10(p-value)",
+			y=bquote("-log"[10]*'('*italic(p)*'-value)'),
+			x="beta slope estimate",
+			size = "Mean Meth"
+		)
+
+cellTypeCorrectedAgeModelBytRNAPlot
+
+ggsave(
+	cellTypeCorrectedAgeModelBytRNAPlot,
+	width = 7,
+	height = 6,
+	filename = "graphics/blood_epitwins450k_Houseman_sws_bl_zhou.png"
+)
+#ggplotly(cellTypeCorrectedAgeModelBytRNAPlot)
+```
+
+## Raw cell count data
+
+```{r}
+cellTypeCorrectedCountAgeModelBytRNA <- 
+tRNAprobes %>%
+	as.data.frame() %>%
+	rownames_to_column(var = "probe") %>%
+	left_join(
+		probesIntRNAs %>% dplyr::select(tRNAname, probe),
+		by = "probe"
+	) %>%
+	gather(key = "KCLid", value = "beta", -tRNAname,-probe) %>%
+	mutate(KCLid = as.integer(KCLid)) %>% ###!!!!######
+	left_join(metadataByKCLid, by = "KCLid") %>%
+	nest(-tRNAname) %>%
+	mutate(
+		model = map(
+			data,
+			~lm(
+				ageDNAextraction ~ 
+					#beta + Bcell + CD4T + CD8T + Eos + Mono + Neu + NK,
+					beta + eosinophils + lymphocytes + monocytes + neutrophils,# + abs_blooddiff,
+				data = .
+			) 
+		)
+	) %>%
+	#mutate(tidy = map(model, tidy)) %>%
+	mutate(tidy = map(model, ~selectTidy(.x,"beta"))) %>%
+	unnest(tidy, .drop = FALSE) %>%
+	#dplyr::select(-std.error, -statistic, -p.value) %>%
+	#spread(term,estimate) %>%
+	mutate(glance = map(model, glance)) %>%
+	unnest(glance) %>%
+	mutate(summaryStats = map(data,~summaryStats(.x$beta))) %>%
+	unnest(summaryStats) %>%
+	dplyr::select(-model,-data) %>%
+	arrange(p.value) %>%
+	mutate(meDIPseqGWStRNA = tRNAname %in% meDIPseqGWStRNAs) %>%
+	mutate(meDIPseqGWStRNAsBB = tRNAname %in% meDIPseqGWStRNAsBB) %>%
+	mutate(swsBB23bl = tRNAname %in% swsBB23bl) %>%
+	mutate(
+		hasGoodZhou = 
+			ifelse(
+				tRNAname %in% (
+					probesIntRNAs %>% filter(probe %in% zhougoodProbes) %>% 
+					pull(tRNAname)
+				), "Robust", "Masked"
+			)
+	)
+
+write_tsv(
+	cellTypeCorrectedCountAgeModelBytRNA %>%
+		mutate(nominalSig = p.value < nominalBonfertRNA),
+	path = "out/blood_epitwins450k_cellTypeCorrectedCountAgeModelBytRNA_zhou.tsv"
+)
+
+cellTypeCorrectedCountAgeModelBytRNA %>%
+	filter(p.value < nominalBonfertRNA)
+```
+
+```{r}
+cellTypeCorrectedCountAgeModelBytRNA <-
+read_tsv(
+	file = "out/blood_epitwins450k_cellTypeCorrectedCountAgeModelBytRNA_zhou.tsv"
+)
+```
+
+
+```{r}
+cellTypeCorrectedCountAgeModelBytRNAPlotBase <- 
+cellTypeCorrectedCountAgeModelBytRNA %>%
+	filter(!tRNAname %in% bltRNAs) %>%
+	left_join(
+		probesIntRNAs %>% 
+			group_by(tRNAname) %>%
+			dplyr::summarise(probes = paste0(probe, collapse = ", ")),
+		by = "tRNAname"
+	) %>%
+	mutate(
+		label = if_else(
+			#(p.value < nominalBonfertRNA) | (meDIPseqGWStRNAsBB), tRNAname, "",
+			(p.value < nominalBonfertRNA) | (swsBB23bl), tRNAname, ""
+			#meDIPseqGWStRNAsBB, tRNAname, ""
+		)
+	) %>%
+	ggplot(aes(beta,-log10(p.value))) + 
+		geom_point(
+			aes(
+				size = mean,
+				shape = hasGoodZhou,
+				# colour = meDIPseqGWStRNAsBB,
+				colour = swsBB23bl,
+				text = paste0(
+					"probe(s): ",
+					probes,
+					# paste0(probe,collapse = ", "),
+					"\n",
+					"tRNA: ", tRNAname
+				)
+			),
+			alpha = 0.6
+		) +
+		scale_shape_manual(values = c("Robust" = 16, "Masked" = 1)) +
+		scale_color_manual(values = c("black", "red")) +
+		guides(
+			#shape = guide_legend(title = "SWS in meDIP-seq"),
+			colour = guide_legend(
+				title = "Study Wide Sig.\nMeDIP-seq\nBlood & Batch",
+				#title = sprintf("p < %.3e", nominalBonfer)
+			)
+		) +
+		geom_text_repel(aes(label = label)) + 
+		geom_hline(yintercept = -log10(nominalBonfertRNA))
+	
+	cellTypeCorrectedCountAgeModelBytRNAPlot <-
+		cellTypeCorrectedCountAgeModelBytRNAPlotBase + 
+		labs(
+			title = "450K probes over tRNA genes (Twins UK)",
+			subtitle =sprintf("p < %.3e", nominalBonfertRNA),
+			#caption = "lm(age ~ beta + eosinophils + lymphocytes + monocytes + neutrophils)",
+			#subtitle = "lm(age~betas)",
+			#y = "-log10(p-value)",
+			y=bquote("-log"[10]*'('*italic(p)*'-value)'),
+			x="beta slope estimate",
+			size = "Mean Meth",
+			shape = "Robust Probe"
+		)
+
+cellTypeCorrectedCountAgeModelBytRNAPlot
+
+ggsave(
+	cellTypeCorrectedCountAgeModelBytRNAPlot,
+	width = 7,
+	height = 6,
+	filename = "graphics/blood_epitwins450k_Counts_sws_bl_zhou.png"
+)
+
+#ggplotly(cellTypeCorrectedCountAgeModelBytRNAPlot)
+```
+
+# combined
+
+```{r, fig.width = 10, fig.height = 5, eval = FALSE}
+combinedCellCountsAndHouseman <- 
+{
+	cellTypeCorrectedCountAgeModelBytRNAPlotBase +  
+	labs(
+		title = "EpiTwins 450K probes over tRNA genes",
+		subtitle = "(A) Cell-Counts",  #sprintf("p < %.3e", nominalBonfertRNA),
+		caption = "lm(age ~ beta + eosinophils + lymphocytes + monocytes + neutrophils)",
+		#subtitle = "lm(age~betas)",
+		#y = "-log10(p-value)",
+		y=bquote("-log"[10]*'('*italic(p)*'-value)'),
+		x="beta slope estimate",
+		size = "Mean Meth"#,
+		#tag = ""
+	) + theme(legend.position = "none")
+} + {
+	cellTypeCorrectedAgeModelBytRNAPlotBase + 
+	labs(
+		#title = "B",
+		subtitle = paste0("(B) Houseman | ", sprintf("p < %.3e", nominalBonfertRNA)),
+		caption = "lm(age ~ beta + Bcell + CD4T + CD8T + Eos + Mono + Neu + NK)",
+		#subtitle = "lm(age~betas)",
+		#y = "-log10(p-value)",
+		y=bquote("-log"[10]*'('*italic(p)*'-value)'),
+		x="beta slope estimate",
+		size = "Mean Meth"
+		#tag = "B"
+	)
+}
+
+combinedCellCountsAndHouseman
+```
+
+```{r, eval = FALSE}
+ggsave(
+	combinedCellCountsAndHouseman,
+	filename = "graphics/combinedCellCountsAndHouseman_zhou.png",
+	width = 10,
+	height = 5
+)
+```
+
+
+## by probe
+
+```{r}
+basicAgeModelbyProbe <- 
+tRNAprobes %>%
+	# as.data.frame() %>%
+	# rownames_to_column(var = "probe") %>%
+	gather(key = "KCLid", value = "beta", -probe) %>%
+	left_join(
+		metadataByKCLid %>% mutate(KCLid = as.character(KCLid)),
+		by = "KCLid"
+	) %>%
+	nest(-probe) %>%
+	mutate(
+		model = map(data, ~lm(ageDNAextraction ~ beta, data = .) )
+	) %>%
+	mutate(tidy = map(model, ~selectTidy(.x,"beta"))) %>%
+	#mutate(tidy = map(model, tidy)) %>%
+	unnest(tidy, .drop = FALSE) %>%
+	#dplyr::select(-std.error, -statistic, -p.value) %>%
+	#spread(term,estimate) %>%
+	mutate(glance = map(model, glance)) %>%
+	unnest(glance) %>%
+	mutate(summaryStats = map(data,~summaryStats(.x$beta))) %>%
+	unnest(summaryStats) %>%
+	dplyr::select(-model,-data) %>%
+	arrange(p.value) %>%
+	
+	left_join(
+		probesIntRNAs %>% dplyr::select(tRNAname, probe),
+		by = "probe"
+	) %>%
+	mutate(meDIPseqGWStRNA = tRNAname %in% meDIPseqGWStRNAs)%>%
+	mutate(meDIPseqGWStRNAsBB = tRNAname %in% meDIPseqGWStRNAsBB)
+
+write_tsv(
+	basicAgeModelbyProbe %>%
+		mutate(nominalSig = p.value < nominalBonfer),
+	path = "out/blood_epitwins450k_basicAgeModelbyProbe_zhou.tsv"
+)
+
+basicAgeModelbyProbe %>%
+	filter(p.value < nominalBonfer)
+```
+
+```{r}
+basicAgeModelbyProbePlot <- 
+basicAgeModelbyProbe %>%
+	ggplot(aes(beta, -log10(p.value))) + 
+		geom_point(
+			aes(
+				size = mean,
+				text = paste0("probe: ",probe,"\ntRNA: ",tRNAname),
+				colour = meDIPseqGWStRNAsBB
+			),
+			alpha = 0.6
+		)+
+		scale_color_manual(values = c("black", "red")) +
+		labs(
+			title = "EpiTwins 450K probes over tRNA genes",
+			#subtitle = "lm(age~betas)",
+			y = "-log10(p-value)",
+			#y = bquote("-log"[10]*'('*italic(p)*'-value)'),
+			x = "model slope"
+		)# +
+		guides(
+			shape = guide_legend(title = "GWS in meDIP-seq"),
+			colour = guide_legend(
+				title = "BBsig"
+				#title = sprintf("p < %.3e", nominalBonfer)
+			)
+		) +
+		geom_hline(yintercept = -log10(nominalBonfer))
+
+#basicAgeModelbyProbePlot
+ggplotly(basicAgeModelbyProbePlot)
+```
+
+## by probe cell-type corrected
+
+```{r, eval = FALSE}
+cellTypeCorrectedAgeModelByProbe <- 
+tRNAprobes %>%
+	as.data.frame() %>%
+	rownames_to_column(var = "probe") %>%
+	gather(key = "KCLid", value = "beta", -probe) %>%
+	left_join(metadataByKCLid, by = "KCLid") %>%
+	nest(-probe) %>%
+	mutate(
+		model = map(
+			data,
+			~lm(
+				ageDNAextraction ~ 
+					beta + Bcell + CD4T + CD8T + Eos + Mono + Neu + NK,
+				data = .
+			) 
+		)
+	) %>%
+	#mutate(tidy = map(model, tidy)) %>%
+	mutate(tidy = map(model, ~selectTidy(.x,"beta"))) %>%
+	unnest(tidy, .drop = FALSE) %>%#
+	#dplyr::select(-std.error, -statistic, -p.value) %>%
+	#spread(term,estimate) %>%
+	mutate(glance = map(model, glance)) %>%
+	unnest(glance) %>%
+	mutate(summaryStats = map(data,~summaryStats(.x$beta))) %>%
+	unnest(summaryStats) %>%
+	dplyr::select(-model,-data) %>%
+	arrange(p.value) %>%
+	
+	left_join(
+		probesIntRNAs %>% dplyr::select(tRNAname, probe),
+		by = "probe"
+	) %>%
+	mutate(meDIPseqGWStRNA = tRNAname %in% meDIPseqGWStRNAs) %>%
+	mutate(meDIPseqGWStRNAsBB = tRNAname %in% meDIPseqGWStRNAsBB)
+
+cellTypeCorrectedAgeModelByProbe %>%
+	filter(p.value < nominalBonfer)
+```
+
+```{r, eval = FALSE}
+cellTypeCorrectedAgeModelByProbePlot <- 
+cellTypeCorrectedAgeModelByProbe %>%
+	ggplot(aes(beta,-log10(p.value))) + 
+		geom_point(
+			aes(
+				size = mean,
+				colour = meDIPseqGWStRNAsBB,
+				text = paste0("probe: ",probe,"\ntRNA: ",tRNAname)
+			),
+			alpha = 0.6
+		) +
+		scale_color_manual(values=c("black","red")) +
+		labs(
+			title = "EpiTwins 450K probes over tRNA genes",
+			#subtitle = "lm(age~betas)",
+			y = "-log10(p-value)",
+			#y=bquote("-log"[10]*'('*italic(p)*'-value)'),
+			x="model slope"
+		) + 
+		guides(
+			shape = guide_legend(title = "GWS in meDIP-seq"),
+			colour = guide_legend(
+				title = "BBsig"
+				#title = sprintf("p < %.3e", nominalBonfer)
+			)
+		) +
+		geom_hline(yintercept = -log10(nominalBonfer))
+
+#cellTypeCorrectedAgeModelByProbePlot
+ggplotly(cellTypeCorrectedAgeModelByProbePlot)
+```
+
+### tRNAs identified the meDIP-seq also significant here
+
+```{r}
+sigAndInPriorHits <- function(data,priorHits){
+	unique(
+		as.character(
+			data$tRNAname[data$tRNAname %in% priorHits & data$threshold]
+		)
+	)
+}
+```
+
+```{r}
+reptRNAsNo <- AgeModelsBytRNA %>%
+	filter(model == "NoCovars") %>% 
+	sigAndInPriorHits(priorHits = meDIPseqGWStRNAs)
+reptRNAsNo
+```
+
+```{r}
+reptRNAsBC <- AgeModelsBytRNA %>%
+	filter(model == "BloodCountCorrected") %>% 
+	sigAndInPriorHits(priorHits = meDIPseqGWStRNAs)
+reptRNAsBC
+```
+
+```{r}
+reptRNAs <- c(reptRNAsNo,reptRNAsBC) %>% unique()
+# reptRNAs <- as.character(AgeModelsBytRNA$tRNAname[AgeModelsBytRNA$tRNAname %in% meDIPseqGWStRNAs & AgeModelsBytRNA$threshold])
+# reptRNAs
+```
+
+```{r}
+# AgeModelsBytRNA %>%
+# 	filter(model=="BloodCountCorrected") %>%
+# 	select(tRNAname) %>%#
+# 	distinct() %>%
+# 	pull() %>%
+# 	as.character()
+
+AgeModelsBytRNA %>%
+    filter(model=="BloodCountCorrected") %>%
+    #filter(p.value < nominalBonfer) %>% 
+	pull(tRNAname) %>% unique() %>% length()
+```
+
+```{r}
+sigSet <- AgeModelsBytRNA %>%
+	filter(model=="BloodCountCorrected") %>%
+	select(tRNAname,statistic,p.value,negLog10P,threshold) %>%
+	filter(threshold=="TRUE") 
+
+sigSet %>%	pull(tRNAname) %>% unique() %>% length()
+sigSet
+```
+
+```{r}
+nonSigSet <- AgeModelsBytRNA %>%
+	filter(model=="BloodCountCorrected") %>%
+	select(tRNAname,statistic,p.value,negLog10P,threshold) %>%
+	filter(threshold=="FALSE")
+
+nonSigSet %>%	pull(tRNAname) %>% unique() %>% length()
+```
+
+```{r}
+# N prior tRNA for which there array probes
+meDIPseqGWStRNAsOnArray %>% length()
+meDIPseqGWStRNAsOnArray
+```
+
+```{r}
+# N prior tRNAs for which there are age model values
+meDIPseqGWStRNAsWithData <- 
+meDIPseqGWStRNAs[
+	meDIPseqGWStRNAs %in% (
+		AgeModelsBytRNA %>% 
+			filter(model=="BloodCountCorrected") %>% 
+			pull(tRNAname)
+	)
+]
+
+meDIPseqGWStRNAsWithData %>% length()
+meDIPseqGWStRNAsWithData
+# NB exact same in NoCovars
+```
+
+There is data for 114 tRNAs of which 12 were is the tRNAge set
+
+```{r}
+# replicating
+sigSet %>%
+	filter(tRNAname %in% meDIPseqGWStRNAsWithData)
+
+sigSet %>%
+	filter(tRNAname %in% meDIPseqGWStRNAsWithData) %>%
+	pull(tRNAname) %>% unique() %>% length()
+```
+
+7 replicate, inc....
+
+```{r}
+# not sig
+nonSigSet %>%
+	filter(!(tRNAname %in% sigSet$tRNAname)) %>% # lose non-sig probes from sig tRNAs
+	filter(tRNAname %in% meDIPseqGWStRNAsWithData)
+	
+nonSigSet %>%
+	filter(tRNAname %in% meDIPseqGWStRNAsWithData) %>%
+	filter(!(tRNAname %in% sigSet$tRNAname)) %>%
+	pull(tRNAname) %>% unique() %>% length()
+```
+
+5 of the 12 do not show significant increase in the array data (blood type correted, using blood cell counts)
+
+```{r}
+anti_join(
+	meDIPseqGWStRNAsWithData %>% 
+		as.character() %>% 
+		as.tibble() %>% dplyr::rename(tRNAname = value),
+	sigSet %>% select(tRNAname) %>% distinct()
+)
+```
+
+```{r}
+sigSet %>%
+	filter(!(tRNAname %in% meDIPseqGWStRNAsWithData))
+sigSet %>%
+	filter(!(tRNAname %in% meDIPseqGWStRNAsWithData)) %>%
+	pull(tRNAname) %>%
+	unique()
+#sigSet$tRNAname[!(sigSet$tRNAname %in%	meDIPseqGWStRNAsWithData)] %>% as.character() 
+```
+
+7 tRNAs with significant increases in DNAm in this data not in original set
+
+tRNA-Ile-AAt-5-5 - sig increase disagrees with targeted BS-seq data where it is not increaseing but both have methylation very low at this site. 
+
+### By probe
+
+#### No covariates
+
+```{r}
+negLog10PRange <- range(AgeModelsBytRNA$negLog10P)
+plots <- AgeModelsBytRNA %>%
+	filter(model=="NoCovars") %>% 
+	mutate(tRNAname = gsub("tRNA-","",tRNAname)) %>%
+	group_by(aa) %>%
+	select(
+		tRNAname, negLog10P, estimate, probe, aa, meDIPseqGWStRNA, meanMeth
+	) %>% do(
+		plots = ggplot(data = .,aes(probe,negLog10P)) + 
+		scale_color_gradient(low="Darkblue",high="orange") +
+		geom_point(aes(colour=estimate,
+						shape=meDIPseqGWStRNA,
+						size=meanMeth)) + 
+		ylim(negLog10PRange) + 
+		labs(title = .$aa,
+			y=bquote("-log"[10]*'('*italic(p)*'-value)')
+			)+
+		theme(axis.text.x = element_text(angle = 15,hjust = 1),
+				strip.text = element_text(face="bold",size = 14),
+				axis.title = element_text(face = "bold", size = 12)) + 
+		guides(colour=guide_legend(title = "model slope"),
+				size = guide_legend(title = "Mean Methylation"),
+				shape = guide_legend(title = "GWS in meDIP-seq")) +
+		facet_wrap(~tRNAname,scales = "free_x")+
+		geom_hline(yintercept = -log10(nominalBonfer))
+)
+```
+
+```{r}
+plots$plots
+```
+
+```{r,eval=FALSE}
+p <- plots %>% do(
+	out = ggsave(
+		plot = .$plots,
+			filename = paste0(
+				"graphics/Blood_EpiTwins450k_tRNA_Covars_zhou_" , .$aa , ".png"
+			),
+			width = 16,
+			height = 9
+		)
+	)
+rm(p)
+```
+
+#### Both models
+
+```{r}
+negLog10PRange <- range(AgeModelsBytRNA$negLog10P)
+plots2 <- AgeModelsBytRNA %>%
+	mutate(tRNAname = gsub("tRNA-","",tRNAname)) %>%
+	group_by(aa) %>%
+	select(tChr,model,tRNAname,negLog10P,estimate,probe,aa,meDIPseqGWStRNA,meanMeth) %>% do(plots =
+	ggplot(data = .,aes(probe,negLog10P)) + 
+		scale_color_gradient(low="Darkblue",high="orange") +
+		geom_point(aes(colour=estimate,
+						shape=meDIPseqGWStRNA,
+						size=meanMeth)) + 
+		ylim(negLog10PRange) + 
+		labs(title = .$aa,
+			y=bquote("-log"[10]*'('*italic(p)*'-value)')
+			)+
+		theme(axis.text.x = element_text(angle = 30,hjust = 1),
+				strip.text = element_text(face="bold",size = 8,angle = 15),
+				axis.title = element_text(face = "bold", size = 12)) + 
+		guides(colour=guide_legend(title = "model slope"),
+				size = guide_legend(title = "Mean Methylation"),
+				shape = guide_legend(title = "GWS in meDIP-seq")) +
+		#facet_wrap(~tRNAname,scales = "free_x") +
+		facet_grid(model~tRNAname+tChr,scales = "free_x") +
+		geom_hline(yintercept = -log10(nominalBonfer))
+)
+```
+
+```{r, fig.width=12,fig.height=6}
+plots2$plots
+#plots2$plots[9]
+```
+
+```{r,eval=FALSE}
+p2 <- plots2 %>% do(
+	out = ggsave(
+		plot = .$plots,
+		filename = paste0(
+			"graphics/Blood_EpiTwins450k_tRNA_Covars_zhou_" , .$aa , ".png"
+		),
+		width = 12,
+		height = 6
+	)
+)
+rm(p2)
+```
+
+
+# tRNAs that validate
+
+```{r fig.width=12,fig.height=6}
+plot <- AgeModelsBytRNA %>% 
+	filter(tRNAname %in% reptRNAs) %>% select(tChr,model,tRNAname,negLog10P,estimate,probe,aa,meDIPseqGWStRNA,meanMeth) %>% 
+    ggplot(data = .,aes(probe,negLog10P)) + 
+        scale_color_gradient(low="Darkblue",high="orange") +
+        geom_point(aes(colour=estimate,
+                       size=meanMeth)) + 
+        ylim(negLog10PRange) + 
+        labs(title = "tRNAs GWS in meDIP-seq and Significant in 450k",
+             y=bquote("-log"[10]*'('*italic(p)*'-value)')
+             )+
+        theme(axis.text.x = element_text(angle = 25,hjust = 1),
+              strip.text = element_text(face="bold",size = 10),
+              axis.title = element_text(face = "bold", size = 12)) + 
+        guides(colour=guide_legend(title = "model slope"),
+               size = guide_legend(title = "Mean Methylation")) +
+		facet_grid(model~tRNAname+tChr,scales = "free_x") +
+		geom_hline(yintercept = -log10(nominalBonfer))
+
+ggsave(
+	plot,filename = "graphics/Blood_replicatingtRNAs_bloodCorrection_zhou.png",
+	width = 12,height = 6
+)
+
+plot
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+

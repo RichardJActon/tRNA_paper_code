@@ -1,0 +1,770 @@
+---
+title: "MINTmap custom reference build results - PRJNA391912"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+# runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+bibliography: "`r normalizePath(params$bibliography)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+params:
+  pwd: "~/Documents/PhD_Stuff/phd/Projects/tRNA_Stuff/tRNA_expression/src/"
+  bibliography: "~/Documents/bibtex/library.bib"
+  csl: "~/Documents/bibtex/genomebiology.csl"
+  MmOutPrefix: "pre-tRNA-ref"
+  MmOutDir: "../out/PRJNA391912/MmOutDir/"
+  trimmedOut: "../out/out_gitIg/PRJNA391912/trimmed/"
+  fastqSource: "../data/data_gitIg/PRJNA391912/"
+---
+# Introduction
+
+Applying the [MINTmap](https://github.com/TJU-CMC-Org/MINTmap) [@Loher2017] tool used to build, [MINTbase](https://cm.jefferson.edu/MINTbase/) [@Pliatsika2018] to the small RNA sequencing data from blood, including cell-type sorted samples [@Juzenas2017] to examine tRF expression with Age. Using a custom MINTmap reference build designed to detect pre-tRNA fragments. This build uses only fragments that unambigiously map to a single genomic location, which are 16-50bp in length and which overlap the ends of the tRNA gene by at least 1bp.
+
+# Set-up
+
+## Environment
+
+```{r env}
+knitr::opts_knit$set(root.dir = normalizePath(params$pwd))
+setwd(params$pwd)
+```
+
+## libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(future)
+	library(future.apply)
+	library(future.batchtools)
+	library(broom)
+	library(Cairo)
+	# library(FactoMineR)
+	# library(factoextra)
+	library(plotly)
+})
+```
+
+```{r}
+nest <- nest_legacy
+unnest <- unnest_legacy
+```
+
+
+# Data Read-in
+
+## tRNAge genes
+
+```{r}
+bbgwstRNAs <- read_tsv(
+	"../../tRNA-GtRNAdb/BB_GWS_tRNA.txt",
+	col_names = "tRNAname",
+	col_types = "c"
+)
+```
+
+## Sample Meta data
+
+```{r sampleMetadata}
+meta <- read_tsv(
+	paste0(params$fastqSource,"SraRunTable.txt"),
+	col_types = cols(
+		.default = col_character(),
+		MBases = col_double(),
+		MBytes = col_double(),
+		age = col_double(),
+		cell_count = col_double(),
+		erythrocytes = col_double(),
+		hematocrit = col_double(),
+		individual = col_double(),
+		leukocytes = col_double(),
+		purity = col_double(),
+		AvgSpotLen = col_double(),
+		InsertSize = col_double(),
+		LoadDate = col_date(format = ""),
+		ReleaseDate = col_date(format = "")
+	)
+)
+```
+
+## Read in MINTmap results
+
+```{r MINTmapResFiles}
+nms <- list.files(
+	path = params$MmOutDir,
+	full.names = TRUE,
+	pattern = paste0(
+		params$MmOutPrefix,
+		"_\\w+-MINTmap_v1-exclusive-tRFs.expression.txt"
+	)
+)
+```
+
+## Read in MINTmap results
+
+```{r parseMINTmap}
+MINTmapRes <- 
+sapply(nms, function(fastq){
+
+	df <- read_tsv(
+		fastq,
+		col_types = "cccddddc",
+		na = c("", "NA","na")
+	)
+	
+	colnames(df) <- c(
+		"MINTbasePlate", "tRF_seq", "tRF_type", "raw_read_count",
+		"RPMallCounts", "RPM_f", "RPM_d", "tRNAspaceLoc"#, "sample"
+	)
+	
+	df %>% 
+		mutate(
+			sample = gsub(
+				fastq,
+				pattern = ".*ref_(\\w+)\\-.*",replacement = "\\1"
+			)
+		)
+	
+}, USE.NAMES = TRUE, simplify = FALSE) %>% 
+	bind_rows()
+```
+
+```{r sampleMINTmapResults}
+MINTmapRes %>% 
+	arrange(desc(RPM_f)) %>% 
+	head(10)
+```
+
+```{r keyMINTmapVariables}
+keyMetaColnms <- c(
+	"BioSample", "Run", "Sample_Name", "age", "cell_count", "erythrocytes",
+	"gender", "hematocrit", "individual","source_name"
+)
+
+keyMetaCols <- 
+meta %>%
+	select(keyMetaColnms)
+```
+
+
+## Joining Expression results and Sample Meta
+
+```{r metaJoin}
+MINTmapResMeta <- 
+left_join(
+	MINTmapRes,
+	keyMetaCols %>% rename(sample = Run),
+	by = "sample"
+) %>%
+	separate(
+		tRF_type,
+		into = c("tRNAname","half"),
+		sep = "_"
+	)
+```
+
+# MINTmap Data Overview
+
+## Filtering
+
+### Quality
+
+```{r}
+MINTmapResMetaMinInst <- 
+MINTmapResMeta %>% 
+	group_by(MINTbasePlate) %>%
+	#summarise(n=n()) %>%
+	filter(n()>= 20)
+
+tRFsMinPeople <- 
+MINTmapResMeta %>% 
+	group_by(MINTbasePlate) %>% 
+	summarise(nd = length(unique(individual))) %>%
+	filter(nd >= 20) %>%
+	pull(MINTbasePlate)
+
+MINTmapResMetaFiltered <- 
+MINTmapResMetaMinInst %>%
+	filter(MINTbasePlate %in% tRFsMinPeople) %>%
+	ungroup()
+```
+
+### Results with Age data
+
+```{r ageBasics}
+MINTmapResMetaFiltered %>% distinct(individual,age)
+MINTmapResMetaFiltered %>% distinct(individual,age) %>% na.omit() %>% nrow()
+MINTmapResMetaFiltered %>% distinct(individual,age) %>% pull(age) %>% na.omit() %>% range()
+MINTmapResMetaFiltered %>% distinct(individual,age) %>% na.omit() %>%
+	ggplot(aes(age)) + 
+		geom_density()
+```
+
+```{r filterHasAge}
+MINTmapResMetaFiltered %>% nrow()
+
+MINTmapResMetaFiltered <- 
+MINTmapResMetaFiltered %>%
+	drop_na(age)
+
+MINTmapResMetaFiltered %>% nrow()
+```
+
+```{r}
+MINTmapResMeta %>% nrow()
+MINTmapResMetaFiltered %>% nrow()
+```
+
+Unique Individiuals
+
+```{r}
+MINTmapResMetaFiltered %>%
+	distinct(individual) %>%
+	nrow()
+```
+
+Unique Fragments
+
+```{r}
+MINTmapResMetaFiltered %>% 
+	distinct(MINTbasePlate) %>% 
+	nrow()
+```
+
+Unique tRNAs
+
+```{r}
+MINTmapResMetaFiltered %>%
+	distinct(tRNAname) %>%
+	nrow()
+```
+
+fragments by tRNA distribution
+
+```{r}
+MINTmapResMetaFiltered %>%
+	distinct(tRNAname,MINTbasePlate) %>%
+	group_by(tRNAname) %>%
+	summarise(n=n()) %>%
+	arrange(desc(n))
+
+MINTmapResMetaFiltered %>%
+	distinct(tRNAname,MINTbasePlate) %>%
+	group_by(tRNAname) %>%
+	summarise(n=n()) %>%
+	ggplot(aes(n)) + 
+	geom_histogram(binwidth = 1)
+```
+
+Note availale tRNA in MINTmap reference and compare to age set etc.
+
+## Read Count Distributions
+
+RPM_f is raw read count with total read count in the input file in the denominator
+
+RPMallCounts is raw read count with total read count in the results file in the denominator
+
+```{r expressionDist}
+MINTmapResMetaFiltered %>%
+	ggplot(aes(raw_read_count)) +
+	geom_density()
+
+MINTmapResMetaFiltered %>%
+	ggplot(aes(RPMallCounts)) +
+	geom_density()
+
+MINTmapResMetaFiltered %>%
+	ggplot(aes(RPM_f)) +
+	geom_density()
+```
+
+
+```{r expressionDistLog}
+MINTmapResMetaFiltered %>%
+	ggplot(aes(log(raw_read_count))) +
+	geom_density()
+
+MINTmapResMetaFiltered %>%
+	ggplot(aes(log(RPMallCounts))) +
+	geom_density()
+
+MINTmapResMetaFiltered %>%
+	ggplot(aes(log(RPM_f))) +
+	geom_density()
+```
+
+natural log transform for better distribution, using RPM_f as assuming total input reads will mostly capture technical variability
+
+```{r}
+MINTmapResMetaFiltered <- 
+MINTmapResMetaFiltered %>%
+	mutate(log_RPM_f = log(RPM_f)) %>%
+	mutate(len = str_length(tRF_seq))
+```
+
+```{r}
+MINTmapResMetaFiltered %>%
+	group_by(half) %>%
+	summarise(n=n())
+```
+
+## tRNA fragment Size Distribution
+
+```{r}
+fragSizeDist <- 
+MINTmapResMetaFiltered %>%
+	ggplot(aes(len)) + 
+		geom_density()
+
+fragSizeDist %>% ggplotly()
+```
+
+```{r}
+fragSizeDist %>% saveRDS(file = "../out/fragSizeDist_custom.Rds")
+```
+
+
+```{r}
+fragSizeDist <- 
+MINTmapResMetaFiltered %>%
+	ggplot(aes(len)) + 
+		geom_density(aes(frame = age))
+
+fragSizeDist %>% ggplotly()
+```
+
+Whilst there is still a peak at ~18nt, with suggestions of peaks near 22nt and 32nt the tRNA fragment length distribution is somewhat different from that of the standard MINTmap refernce with larger peaks at ~28 and ~40nt as expected given that this reference aimed to target fragments derived from pre-tRNAs not tRFs derived from mature tRNAs.
+
+# Overview plots
+
+## Global tRF Expression ~ Age
+
+```{r}
+MINTmapResMetaFiltered %>%
+	ggplot(aes(age,log_RPM_f)) +
+		geom_point() +
+		geom_smooth(method = "lm")
+```
+
+```{r}
+globalAgeMod <- 
+lm(
+	data = MINTmapResMetaFiltered,
+	age ~ log_RPM_f
+) 
+
+globalAgeMod %>% summary()
+```
+
+
+## Age ~ Cell-type
+
+```{r}
+MINTmapResMetaFiltered %>%
+	ggplot(aes(age,log_RPM_f)) +
+		geom_point() +
+		geom_smooth(method = "lm") + 
+		facet_wrap(~source_name)
+```
+
+# Age Models
+
+## Age modeling by tRNA
+
+```{r}
+ageModelsBytRNA <- 
+MINTmapResMetaFiltered %>%
+	nest(-tRNAname) %>%
+	mutate(model = map(data, ~lm(age ~ log_RPM_f,data = .))) %>%
+	unnest(map(model,tidy), .drop = FALSE) %>%
+	select(-std.error, -statistic, -p.value) %>%
+	spread(term,estimate) %>%
+	rename(intercept = `(Intercept)`, slope = `log_RPM_f`) %>%
+	unnest(map(model,glance)) %>%
+	select(-data,-model) %>%
+	arrange(p.value)
+
+ageModelsBytRNA %>% head(12)
+```
+
+```{r}
+ageModelsBytRNAbonfer <- 0.05/(ageModelsBytRNA %>% nrow())
+```
+
+```{r}
+ageModelsBytRNA %>%
+	filter(p.value < ageModelsBytRNAbonfer)
+```
+
+```{r}
+MINTmapResMetaFiltered %>%
+	filter(tRNAname %in% (ageModelsBytRNA %>% head(12) %>% pull(tRNAname))) %>%
+	group_by(tRNAname) %>%
+	do(
+		plots = 
+		ggplot(.,aes(age,log_RPM_f)) +
+			geom_point(aes(colour = MINTbasePlate),show.legend = TRUE) +
+			geom_smooth(method = "lm") + 
+			#facet_wrap(~source_name) +
+			labs(title = .$tRNAname[1])
+	) %>%
+	pull(plots)
+```
+
+## Age models by tRNA and Cell-type
+
+### sufficient data filter
+
+```{r filtertRNACT}
+(MINTmapResMetaFiltered %>%
+	group_by(tRNAname,source_name) %>%
+	summarise(n=n()) %>%
+	ggplot(aes(n)) + 
+		geom_density()) %>% ggplotly()
+
+tRFsbyCTcountFiltered <- 
+MINTmapResMetaFiltered %>%
+	group_by(tRNAname,source_name) %>%
+	summarise(n=n()) %>%
+	filter(n >= 10)
+```
+
+```{r AgeModelsBytRNAandCT}
+ageModelsBytRNAandCTbonfer <- 
+	0.05/
+	tRFsbyCTcountFiltered %>% 
+	distinct() %>% 
+	nrow()
+
+ageModelsBytRNAandCT <- 
+MINTmapResMetaFiltered %>%
+	drop_na(age) %>%
+	inner_join(
+		tRFsbyCTcountFiltered %>% select(-n),
+		.,
+		by = c("tRNAname","source_name")
+	) %>%
+	ungroup() %>%
+	nest(-tRNAname,-source_name) %>%
+	mutate(model = map(data, ~lm(age ~ log_RPM_f,data = .))) %>%
+	unnest(map(model,tidy), .drop = FALSE) %>%
+	select(-std.error, -statistic, -p.value) %>%
+	spread(term,estimate) %>%
+	rename(intercept = `(Intercept)`, slope = `log_RPM_f`) %>%
+	unnest(map(model,glance)) %>%
+	select(-data,-model) %>%
+	arrange(p.value)
+
+ageModelsBytRNAandCT %>% 	
+	filter(p.value < ageModelsBytRNAandCTbonfer) %>%
+	nrow()
+
+ageModelsBytRNAandCT %>% 
+	arrange(p.value) %>%
+	head(50)
+```
+
+```{r AgeModelsBytRNAandCTplots}
+MINTmapResMetaFiltered %>%
+	filter(
+		tRNAname %in% (ageModelsBytRNAandCT %>% head(12) %>% pull(tRNAname)) &
+		source_name %in% (ageModelsBytRNAandCT %>% head(12) %>% pull(source_name))
+	) %>%
+	group_by(tRNAname, source_name) %>%
+	do(
+		plots = 
+		ggplot(., aes(age, log_RPM_f)) +
+			geom_point() +
+			geom_smooth(method = "lm") + 
+			#facet_wrap(~source_name) +
+			labs(title = paste0(.$tRNAname[1], " (", .$source_name[1], ")"))
+	) %>%
+	pull(plots)
+```
+
+## Age modeling by tRf
+
+```{r}
+bytRFbonfer <- 
+0.05/(MINTmapResMetaFiltered %>% distinct(MINTbasePlate) %>% nrow())
+bytRFbonfer
+```
+
+```{r ageModelsBytRF}
+ageModelsBytRF <- 
+MINTmapResMetaFiltered %>%
+	nest(-MINTbasePlate, -half, -len) %>% 
+	mutate(model = map(data, ~lm(age ~ log_RPM_f,data = .))) %>%
+	unnest(map(model,tidy), .drop = FALSE) %>%
+	select(-std.error, -statistic, -p.value) %>%
+	spread(term,estimate) %>%
+	rename(intercept = `(Intercept)`, slope = `log_RPM_f`) %>%
+	unnest(map(model,glance)) %>%
+	select(-data,-model) %>%
+	arrange(p.value)
+
+ageModelsBytRF %>% head()
+```
+```{r}
+ageModelsBytRF %>% 
+	filter(p.value < 0.05) %>%
+	group_by(half, sign(slope)) %>% 
+	summarise(n=n())
+
+ageModelsBytRF %>% 
+	group_by(half, sign(slope)) %>% 
+	summarise(n=n())
+```
+
+```{r}
+ageModelsBytRF %>% 
+	group_by(len) %>% 
+	summarise(n=n())
+
+ageModelsBytRF %>%
+	filter(len >= 40)
+```
+
+```{r}
+ageModelsBytRF %>% 
+	filter(p.value < 0.05) %>%
+	filter(len >= 40) %>%
+	group_by(sign(slope)) %>% 
+	summarise(n=n())
+
+ageModelsBytRF %>% 
+	filter(p.value < 0.05) %>%
+	filter(len >= 40) %>%
+	group_by(half, sign(slope)) %>% 
+	summarise(n=n())
+```
+
+```{r ageModelsBytRFplots}
+MINTmapResMetaFiltered %>%
+	filter(MINTbasePlate %in% (ageModelsBytRF %>% head(8) %>% pull(MINTbasePlate))) %>%
+	group_by(MINTbasePlate) %>%
+	do(
+		plots = 
+		ggplot(.,aes(age,log_RPM_f)) +
+			geom_point() +
+			geom_smooth(method = "lm") + 
+			#facet_wrap(~source_name) +
+			labs(title = paste0(.$MINTbasePlate[1]," (",.$tRNAname[1],")"))
+	) %>%
+	pull(plots)
+```
+
+## Age Modeling by tRF and Cell-type
+
+```{r filtertRFCT}
+(MINTmapResMetaFiltered %>%
+	group_by(MINTbasePlate,source_name) %>%
+	summarise(n=n()) %>%
+	ggplot(aes(n)) + 
+		geom_density()) %>% ggplotly()
+
+tRFsbyCTcountFiltered <- 
+MINTmapResMetaFiltered %>%
+	group_by(MINTbasePlate,source_name) %>%
+	summarise(n=n()) %>%
+	filter(n >= 10)
+```
+
+```{r AgeModelsBytRFandCT}
+ageModelsBytRFandCTbonfer <- 
+	0.05/
+	tRFsbyCTcountFiltered %>% 
+	distinct() %>% 
+	nrow()
+
+ageModelsBytRFandCT <- 
+MINTmapResMetaFiltered %>%
+	drop_na(age) %>%
+	inner_join(
+		tRFsbyCTcountFiltered %>% select(-n),
+		.,
+		by = c("MINTbasePlate","source_name")
+	) %>%
+	ungroup() %>%
+	nest(-MINTbasePlate,-source_name) %>%
+	mutate(model = map(data, ~lm(age ~ log_RPM_f,data = .))) %>%
+	unnest(map(model,glance)) %>%
+	select(-data,-model) %>%
+	arrange(p.value)
+
+ageModelsBytRFandCT %>% 	
+	filter(p.value < ageModelsBytRFandCTbonfer) %>%
+	nrow()
+
+ageModelsBytRFandCT %>% 
+	arrange(p.value) %>%
+	head(40)
+```
+
+no sig so top
+
+```{r AgeModelsBytRFandCTplots}
+MINTmapResMetaFiltered %>%
+	filter(
+		MINTbasePlate %in% (
+			ageModelsBytRFandCT %>% 
+				head(3) %>% 
+				#filter(p.value < ageModelsBytRFandCTbonfer) %>%
+				pull(MINTbasePlate)
+		),
+		source_name %in% (
+			ageModelsBytRFandCT %>% 
+				head(3) %>% 
+				#filter(p.value < ageModelsBytRFandCTbonfer) %>%
+				pull(source_name)
+		)
+		
+	) %>%
+	group_by(MINTbasePlate,source_name) %>%
+	do(
+		plots = 
+		ggplot(.,aes(age,log_RPM_f)) +
+			geom_point() +
+			geom_smooth(method = "lm") + 
+			#facet_wrap(~source_name) +
+			labs(title = paste0(.$MINTbasePlate[1]," (",.$source_name,")"))
+	) %>% pull(plots) 
+```
+
+---
+
+# tRNAge results
+
+```{r tRFtRNAlocusMappings}
+tRFattributions <- 
+#topAgeModelLocStrPre %>% 
+MINTmapResMetaFiltered %>%
+	distinct(tRNAname,MINTbasePlate)
+
+tRFattributionsBBgwstRNAs <- 
+tRFattributions %>%
+	filter(tRNAname %in% bbgwstRNAs$tRNAname)
+
+# number of distinct tRF/tRNA pairs
+tRFattributions %>% nrow()
+
+tRFattributionsBBgwstRNAs
+```
+
+Only tRNA-Ser-AGA-2-6 and tRF-18-H7PU4H02
+
+## tRNAge results tRF age models
+
+```{r}
+# number fragment that may be attributable to 6 top tRNAge genes:
+ageModelsBytRF %>% 
+	filter(
+		MINTbasePlate %in% tRFattributionsBBgwstRNAs$MINTbasePlate
+	) %>% 
+	nrow()
+```
+
+```{r}
+MINTmapResMetaFiltered %>%
+	filter(MINTbasePlate %in% (
+		# get top ranked tRFs from the top 6 tRNAge tRNAs
+		ageModelsBytRF %>% 
+			filter(
+				MINTbasePlate %in% tRFattributionsBBgwstRNAs$MINTbasePlate
+			) %>% 
+			#filter(p.value < bonferBytRF) %>%  ###
+			#head(30) %>% 
+			pull(MINTbasePlate) 
+	)) %>%
+	group_by(MINTbasePlate) %>%
+	do(
+		plots = 
+		ggplot(.,aes(age,log_RPM_f)) +
+			geom_point() +
+			geom_smooth(method = "lm") + 
+			#facet_wrap(~source_name) +
+			labs(
+				title = paste0(
+					.$MINTbasePlate[1],
+					" (",
+					paste0(
+						tRFattributionsBBgwstRNAs %>% 
+							filter(MINTbasePlate %in% .$MINTbasePlate[1]) %>% 
+							pull(tRNAname),
+						collapse=", "
+					)
+					,")"
+				)
+			)
+	) %>% pull(plots)
+
+```
+
+## tRNAge results tRF & Cell-type age models
+
+```{r}
+ageModelsBytRFandCT %>%
+	filter(MINTbasePlate %in% tRFattributionsBBgwstRNAs$MINTbasePlate) %>%
+	head()
+	#filter(p.value < bonferBytRF)
+```
+
+## tRNAge results tRNA age models
+
+```{r}
+ageModelsBytRNA %>%
+	filter(tRNAname %in% bbgwstRNAs$tRNAname)
+```
+
+```{r}
+MINTmapResMetaFiltered %>%
+	filter(
+		tRNAname %in% (
+				bbgwstRNAs %>% 
+				pull(tRNAname)
+		)
+	) %>%
+	group_by(tRNAname) %>%
+	do(
+		plots = 
+		ggplot(.,aes(age,log_RPM_f)) +
+			geom_point(aes(colour = MINTbasePlate),show.legend = FALSE) +
+			geom_smooth(method = "lm") + 
+			#facet_wrap(~source_name) +
+			labs(title = .$tRNAname[1])
+	) %>%
+	pull(plots)
+```
+
+## tRNAge results tRNA & Cell-type age models
+
+```{r}
+ageModelsBytRNAandCT %>%
+	filter(tRNAname %in% bbgwstRNAs$tRNAname) %>%
+	head()
+	#filter(p.value < bonferBytRNAloc)
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>

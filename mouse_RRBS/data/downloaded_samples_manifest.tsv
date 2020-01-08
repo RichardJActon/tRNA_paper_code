@@ -1,0 +1,174 @@
+title	geo_accession	status	submission_date	last_update_date	type	channel_count	source_name_ch1	organism_ch1	tissue	strain	age (years)	gender	genetic condition	diet	local_files
+20D02	GSM2132712	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard	GSM2132712_20D02.overlap.txt.gz
+20D03	GSM2132713	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard	GSM2132713_20D03.overlap.txt.gz
+20D04	GSM2132714	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard	GSM2132714_20D04.overlap.txt.gz
+20D05	GSM2132715	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard	GSM2132715_20D05.overlap.txt.gz
+20D06	GSM2132716	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard	GSM2132716_20D06.overlap.txt.gz
+20D07	GSM2132717	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard	GSM2132717_20D07.overlap.txt.gz
+35D01	GSM2132718	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard	GSM2132718_35D01.overlap.txt.gz
+35D02	GSM2132719	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard	GSM2132719_35D02.overlap.txt.gz
+35D04	GSM2132720	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard	GSM2132720_35D04.overlap.txt.gz
+35D05	GSM2132721	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard	GSM2132721_35D05.overlap.txt.gz
+35D06	GSM2132722	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard	GSM2132722_35D06.overlap.txt.gz
+35D07	GSM2132723	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard	GSM2132723_35D07.overlap.txt.gz
+B6_CR1001	GSM2132724	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	Calorie Restricted	GSM2132724_b6_cr1001.overlap.txt.gz
+B6_CR1002	GSM2132725	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	Calorie Restricted	GSM2132725_b6_CR1002.overlap.txt.gz
+B6_CR1003	GSM2132726	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	Calorie Restricted	GSM2132726_b6_cr1003.overlap.txt.gz
+B6_CR1004	GSM2132727	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	Calorie Restricted	GSM2132727_b6_cr1004.overlap.txt.gz
+B6_CR1005	GSM2132728	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	Calorie Restricted	GSM2132728_b6_cr1005.overlap.txt.gz
+B6_CR1801	GSM2132729	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	18	Male	Wild Type	Calorie Restricted	GSM2132729_b6_cr1801.overlap.txt.gz
+B6_CR1802	GSM2132730	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	18	Male	Wild Type	Calorie Restricted	GSM2132730_b6_cr1802.overlap.txt.gz
+B6_CR1803	GSM2132731	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	18	Male	Wild Type	Calorie Restricted	GSM2132731_B6_cr1803.overlap.txt.gz
+B6_CR1804	GSM2132732	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	18	Male	Wild Type	Calorie Restricted	GSM2132732_b6_cr1804.overlap.txt.gz
+B6_CR1805	GSM2132733	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	18	Male	Wild Type	Calorie Restricted	GSM2132733_b6_cr1805.overlap.txt.gz
+B6_CR2301	GSM2132734	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	23	Male	Wild Type	Calorie Restricted	GSM2132734_b6_cr2301.overlap.txt.gz
+B6_CR2302	GSM2132735	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	23	Male	Wild Type	Calorie Restricted	GSM2132735_b6_cr2302.overlap.txt.gz
+B6_CR2303	GSM2132736	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	23	Male	Wild Type	Calorie Restricted	GSM2132736_b6_cr2303.overlap.txt.gz
+B6_CR2304	GSM2132737	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	23	Male	Wild Type	Calorie Restricted	GSM2132737_B6_cr2304.overlap.txt.gz
+B6_CR2305	GSM2132738	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	23	Male	Wild Type	Calorie Restricted	GSM2132738_B6_cr2305.overlap.txt.gz
+B6_CR2701	GSM2132739	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	27	Male	Wild Type	Calorie Restricted	GSM2132739_b6_cr2701.overlap.txt.gz
+B6_CR2702	GSM2132740	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	27	Male	Wild Type	Calorie Restricted	GSM2132740_b6_CR2702.overlap.txt.gz
+B6_CR2703	GSM2132741	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	27	Male	Wild Type	Calorie Restricted	GSM2132741_b6_cr2703.overlap.txt.gz
+B6_CR2704	GSM2132742	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	27	Male	Wild Type	Calorie Restricted	GSM2132742_b6_cr2704.overlap.txt.gz
+B6_CR2705	GSM2132743	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	27	Male	Wild Type	Calorie Restricted	GSM2132743_b6_cr2705.overlap.txt.gz
+M0301	GSM2132820	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard	GSM2132820_M0301.overlap.txt.gz
+M0302	GSM2132821	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard	GSM2132821_M0302.overlap.txt.gz
+M0303	GSM2132822	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard	GSM2132822_M0303.overlap.txt.gz
+M0304	GSM2132823	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard	GSM2132823_M0304.overlap.txt.gz
+M0305	GSM2132824	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard	GSM2132824_M0305.overlap.txt.gz
+M0306	GSM2132825	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard	GSM2132825_M0306.overlap.txt.gz
+M0308	GSM2132826	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard	GSM2132826_M0308.overlap.txt.gz
+M0309	GSM2132827	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard	GSM2132827_M0309.overlap.txt.gz
+M0310	GSM2132828	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard	GSM2132828_M0310.overlap.txt.gz
+M0401	GSM2132829	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard	GSM2132829_M0401.overlap.txt.gz
+M0402	GSM2132830	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard	GSM2132830_M0402.overlap.txt.gz
+M0403	GSM2132831	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard	GSM2132831_M0403.overlap.txt.gz
+M0404	GSM2132832	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard	GSM2132832_M0404.overlap.txt.gz
+M0405	GSM2132833	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard	GSM2132833_M0405.overlap.txt.gz
+M0406	GSM2132834	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard	GSM2132834_M0406.overlap.txt.gz
+M0407	GSM2132835	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard	GSM2132835_M0407.overlap.txt.gz
+M0409	GSM2132836	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard	GSM2132836_M0409.overlap.txt.gz
+M0410	GSM2132837	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard	GSM2132837_M0410.overlap.txt.gz
+M0601	GSM2132838	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard	GSM2132838_M0601.overlap.txt.gz
+M0603	GSM2132839	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard	GSM2132839_M0603.overlap.txt.gz
+M0604	GSM2132840	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard	GSM2132840_M0604.overlap.txt.gz
+M0605	GSM2132841	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard	GSM2132841_M0605.overlap.txt.gz
+M0606	GSM2132842	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard	GSM2132842_M0606.overlap.txt.gz
+M0607	GSM2132843	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard	GSM2132843_M0607.overlap.txt.gz
+M0608	GSM2132844	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard	GSM2132844_M0608.overlap.txt.gz
+M0609	GSM2132845	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard	GSM2132845_M0609.overlap.txt.gz
+M0610	GSM2132846	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard	GSM2132846_M0610.overlap.txt.gz
+M0801	GSM2132847	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard	GSM2132847_M0801.overlap.txt.gz
+M0802	GSM2132848	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard	GSM2132848_M0802.overlap.txt.gz
+M0803	GSM2132849	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard	GSM2132849_M0803.overlap.txt.gz
+M0804	GSM2132850	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard	GSM2132850_M0804.overlap.txt.gz
+M0805	GSM2132851	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard	GSM2132851_M0805.overlap.txt.gz
+M0806	GSM2132852	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard	GSM2132852_M0806.overlap.txt.gz
+M0807	GSM2132853	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard	GSM2132853_M0807.overlap.txt.gz
+M0808	GSM2132854	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard	GSM2132854_M0808.overlap.txt.gz
+M0810	GSM2132855	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard	GSM2132855_M0810.overlap.txt.gz
+M10_7501	GSM2132856	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard	GSM2132856_M10_7501.overlap.txt.gz
+M10_7502	GSM2132857	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard	GSM2132857_M10_7502.overlap.txt.gz
+M10_7504	GSM2132858	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard	GSM2132858_M10_7504.overlap.txt.gz
+M10_7505	GSM2132859	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard	GSM2132859_M10_7505.overlap.txt.gz
+M10_7506	GSM2132860	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard	GSM2132860_M10_7506.overlap.txt.gz
+M10_7507	GSM2132861	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard	GSM2132861_M10_7507.overlap.txt.gz
+M10_7508	GSM2132862	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard	GSM2132862_M10_7508.overlap.txt.gz
+M10_7509	GSM2132863	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard	GSM2132863_M10_7509.overlap.txt.gz
+M10_7510	GSM2132864	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard	GSM2132864_M10_7510.overlap.txt.gz
+M1201	GSM2132865	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard	GSM2132865_M1201.overlap.txt.gz
+M1202	GSM2132866	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard	GSM2132866_M1202.overlap.txt.gz
+M1203	GSM2132867	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard	GSM2132867_M1203.overlap.txt.gz
+M1204	GSM2132868	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard	GSM2132868_M1204.overlap.txt.gz
+M1205	GSM2132869	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard	GSM2132869_M1205.overlap.txt.gz
+M1206	GSM2132870	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard	GSM2132870_M1206.overlap.txt.gz
+M1207	GSM2132871	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard	GSM2132871_M1207.overlap.txt.gz
+M1208	GSM2132872	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard	GSM2132872_M1208.overlap.txt.gz
+M1209	GSM2132873	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard	GSM2132873_M1209.overlap.txt.gz
+M1210	GSM2132874	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard	GSM2132874_M1210.overlap.txt.gz
+M1601	GSM2132875	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard	GSM2132875_M1601.overlap.txt.gz
+M1602	GSM2132876	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard	GSM2132876_M1602.overlap.txt.gz
+M1603	GSM2132877	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard	GSM2132877_M1603.overlap.txt.gz
+M1605	GSM2132878	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard	GSM2132878_M1605.overlap.txt.gz
+M1606	GSM2132879	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard	GSM2132879_M1606.overlap.txt.gz
+M1607	GSM2132880	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard	GSM2132880_M1607.overlap.txt.gz
+M1608	GSM2132881	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard	GSM2132881_M1608.overlap.txt.gz
+M1609	GSM2132882	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard	GSM2132882_M1609.overlap.txt.gz
+M1610	GSM2132883	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard	GSM2132883_M1610.overlap.txt.gz
+M2001	GSM2132884	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard	GSM2132884_M2001.overlap.txt.gz
+M2003	GSM2132885	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard	GSM2132885_M2003.overlap.txt.gz
+M2004	GSM2132886	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard	GSM2132886_M2004.overlap.txt.gz
+M2005	GSM2132887	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard	GSM2132887_M2005.overlap.txt.gz
+M2006	GSM2132888	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard	GSM2132888_M2006.overlap.txt.gz
+M2007	GSM2132889	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard	GSM2132889_M2007.overlap.txt.gz
+M2008	GSM2132890	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard	GSM2132890_M2008.overlap.txt.gz
+M2009	GSM2132891	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard	GSM2132891_M2009.overlap.txt.gz
+M2010	GSM2132892	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard	GSM2132892_M2010.overlap.txt.gz
+M2201	GSM2132893	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard	GSM2132893_M2201.overlap.txt.gz
+M2202	GSM2132894	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard	GSM2132894_M2202.overlap.txt.gz
+M2203	GSM2132895	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard	GSM2132895_M2203.overlap.txt.gz
+M2204	GSM2132896	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard	GSM2132896_M2204.overlap.txt.gz
+M2205	GSM2132897	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard	GSM2132897_M2205.overlap.txt.gz
+M2206	GSM2132898	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard	GSM2132898_M2206.overlap.txt.gz
+M2208	GSM2132899	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard	GSM2132899_M2208.overlap.txt.gz
+M2209	GSM2132900	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard	GSM2132900_M2209.overlap.txt.gz
+M2210	GSM2132901	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard	GSM2132901_M2210.overlap.txt.gz
+M2401	GSM2132902	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard	GSM2132902_M2401.overlap.txt.gz
+M2402	GSM2132903	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard	GSM2132903_M2402.overlap.txt.gz
+M2403	GSM2132904	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard	GSM2132904_M2403.overlap.txt.gz
+M2404	GSM2132905	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard	GSM2132905_M2404.overlap.txt.gz
+M2405	GSM2132906	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard	GSM2132906_M2405.overlap.txt.gz
+M2407	GSM2132907	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard	GSM2132907_M2407.overlap.txt.gz
+M2408	GSM2132908	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard	GSM2132908_M2408.overlap.txt.gz
+M2409	GSM2132909	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard	GSM2132909_M2409.overlap.txt.gz
+M2411	GSM2132910	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard	GSM2132910_M2411.overlap.txt.gz
+M2601	GSM2132911	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard	GSM2132911_M2601.overlap.txt.gz
+M2602	GSM2132912	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard	GSM2132912_M2602.overlap.txt.gz
+M2603	GSM2132913	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard	GSM2132913_M2603.overlap.txt.gz
+M2604	GSM2132914	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard	GSM2132914_M2604.overlap.txt.gz
+M2605	GSM2132915	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard	GSM2132915_M2605.overlap.txt.gz
+M2606	GSM2132916	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard	GSM2132916_M2606.overlap.txt.gz
+M2607	GSM2132917	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard	GSM2132917_M2607.overlap.txt.gz
+M2608	GSM2132918	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard	GSM2132918_M2608.overlap.txt.gz
+M2609	GSM2132919	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard	GSM2132919_M2609.overlap.txt.gz
+M2610	GSM2132920	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard	GSM2132920_M2610.overlap.txt.gz
+M2801	GSM2132921	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard	GSM2132921_M2801.overlap.txt.gz
+M2802	GSM2132922	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard	GSM2132922_M2802.overlap.txt.gz
+M2804	GSM2132923	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard	GSM2132923_M2804.overlap.txt.gz
+M2805	GSM2132924	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard	GSM2132924_M2805.overlap.txt.gz
+M2806	GSM2132925	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard	GSM2132925_M2806.overlap.txt.gz
+M2807	GSM2132926	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard	GSM2132926_M2807.overlap.txt.gz
+M2808	GSM2132927	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard	GSM2132927_M2808.overlap.txt.gz
+M2809	GSM2132928	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard	GSM2132928_M2809.overlap.txt.gz
+M2810	GSM2132929	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard	GSM2132929_M2810.overlap.txt.gz
+M3001	GSM2132930	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard	GSM2132930_M3001.overlap.txt.gz
+M3002	GSM2132931	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard	GSM2132931_M3002.overlap.txt.gz
+M3003	GSM2132932	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard	GSM2132932_M3003.overlap.txt.gz
+M3004	GSM2132933	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard	GSM2132933_M3004.overlap.txt.gz
+M3005	GSM2132934	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard	GSM2132934_M3005.overlap.txt.gz
+M3006	GSM2132935	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard	GSM2132935_M3006.overlap.txt.gz
+M3007	GSM2132936	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard	GSM2132936_M3007.overlap.txt.gz
+M3009	GSM2132937	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard	GSM2132937_M3009.overlap.txt.gz
+M3010	GSM2132938	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard	GSM2132938_M3010.overlap.txt.gz
+M3204	GSM2132939	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard	GSM2132939_M3204.overlap.txt.gz
+M3205	GSM2132940	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard	GSM2132940_M3205.overlap.txt.gz
+M3206	GSM2132941	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard	GSM2132941_M3206.overlap.txt.gz
+M3207	GSM2132942	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard	GSM2132942_M3207.overlap.txt.gz
+M3208	GSM2132943	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard	GSM2132943_M3208.overlap.txt.gz
+M3209	GSM2132944	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard	GSM2132944_M3209.overlap.txt.gz
+M3210	GSM2132945	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard	GSM2132945_M3210.overlap.txt.gz
+M3401	GSM2132946	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard	GSM2132946_M3401.overlap.txt.gz
+M3402	GSM2132947	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard	GSM2132947_M3402.overlap.txt.gz
+M3403	GSM2132948	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard	GSM2132948_M3403.overlap.txt.gz
+M3404	GSM2132949	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard	GSM2132949_M3404.overlap.txt.gz
+M3405	GSM2132950	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard	GSM2132950_M3405.overlap.txt.gz
+M3406	GSM2132951	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard	GSM2132951_M3406.overlap.txt.gz
+M3408	GSM2132952	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard	GSM2132952_M3408.overlap.txt.gz
+M3409	GSM2132953	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard	GSM2132953_M3409.overlap.txt.gz
+M3410	GSM2132954	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard	GSM2132954_M3410.overlap.txt.gz
+M3501	GSM2132955	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard	GSM2132955_M3501.overlap.txt.gz
+M3501R	GSM2132956	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard	GSM2132956_M3501R.overlap.txt.gz
+M3502	GSM2132957	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard	GSM2132957_M3502.overlap.txt.gz
+M3502R	GSM2132958	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard	GSM2132958_M3502R.overlap.txt.gz
+M3503	GSM2132959	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard	GSM2132959_M3503.overlap.txt.gz
+M3503R	GSM2132960	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard	GSM2132960_M3503R.overlap.txt.gz

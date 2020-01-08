@@ -1,0 +1,744 @@
+---
+title: "tRNA gene methylation in the Heyn 2012 Newborn and Centenerian WGBS dataset"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+bibliography: "`r normalizePath(params$bib)`"
+params:
+  bib: "../library.bib"
+---
+
+@Heyn2012 performed Whole Genome Bisulfite Sequencing (WGBS) on 3 individuals, a newborn, a 26 year old and a 103 year old. The methylation calls resulting from their initial read mapping etc. are available from Gene Expression Omnibus (GEO) ID: [GSE31263](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE31263)
+
+# Libraries
+
+```{r libs}
+library(dplyr)
+library(ggplot2)
+library(reshape2)
+library(readr)
+library(patchwork)
+```
+
+# Data read in
+
+```{r readIn}
+# New born
+youngNB_tRNA <- read.table("data/youngNB_tRNA.bed")
+dim(youngNB_tRNA)
+
+# 6 year old
+Middle26_tRNA <- read.table("data/Middle26_tRNA.bed")
+dim(Middle26_tRNA)
+
+# 103 year old
+Old103_tRNA <- read.table("data/Old103_tRNA.bed")
+dim(Old103_tRNA)
+
+ages<-c(0,26,103)
+```
+
+# Read in the names of the tRNA genes identified as significant in the EpiTwins dataset
+
+```{r readInEpiTwins}
+load("data/GenomeWideSigtRNAs.RData")
+
+GenWideSigWintRNAg
+length(GenWideSigWintRNAg)
+
+load("data/SigtRNAs.RData")
+#SigWintRNAg
+length(SigWintRNAg)
+```
+
+```{r}
+bbgwstRNAs <- read_tsv("../tRNA-GtRNAdb/BB_GWS_tRNA.txt",col_names = FALSE,col_types = "c") %>% pull()
+bbswstRNAs <- read_tsv("../tRNA-GtRNAdb/swsBB23.tsv",col_names = FALSE,col_types = "c") %>% pull()
+bltRNAs <- read_tsv("../tRNA-GtRNAdb/tRNAs-in-hg19-blacklist-v2.txt",col_names = FALSE,col_types = "c") %>% pull()
+
+bbgwstRNAsbl <- bbgwstRNAs[! bbgwstRNAs %in% bltRNAs]
+bbswstRNAsbl <- bbswstRNAs[! bbswstRNAs %in% bltRNAs]
+```
+
+# Screening for misssing values
+
+Selecting only those sites for which all three individuls have values
+
+```{r screenMissing}
+join <- inner_join(youngNB_tRNA,Middle26_tRNA,by=c("V6","V7","V8"))
+join <- inner_join(join,Old103_tRNA,by=c("V6","V7","V8"))
+joinS <-select(join,V1.x,V2.x,V3.x,V4.x,V5.x,V6,V7,V8,V9.x,V9.y,V9)
+
+colnames(joinS)<-c("tChr","tStart","tEnd","tRNAname","strand","chr","start","end","meth0","meth26","meth103")
+
+dim(joinS)
+```
+
+# Age and methylation linear model function
+
+```{r Agelm}
+Agelm <- function(d,a) # d=data - a row from a dataframe, a=ages - a vector of ages (numeric)
+{
+    result <- lm(a ~ as.vector(t(d[9:11]))) # apply linear modeling to 
+    if (nrow(summary(result)$coeff)>1) # only record values from Linear models which were able to produce all coefficients
+        {
+        slope <- summary(result)$coeff[2,1]
+        Pval <- summary(result)$coeff[2,4]
+        res2 <- rbind(c(slope,Pval))
+    }else 
+    {res2<-c(NA,NA)} # set values to NA for Linear models which did not return all required values.
+    return(res2)
+}
+```
+
+# Perform the liner modeling
+
+```{r linearmodeling, warning=FALSE}
+reslm <- NULL # object to hold the result of the linear modeling
+
+for (q in 1:nrow(joinS)) # use the Agelm function on each row of the data frame housing the data screened for mising values
+{
+    reslm <- rbind(reslm,Agelm(joinS[q,],ages))
+}
+
+colnames(reslm) <- c("slope","pvalue")
+
+joinLM <- cbind(joinS,reslm) # append the results fo the modeling to the data frame housing the data screened for mising values
+
+joinLM$negLog10P <- -log10(joinLM$pvalue) # caluculate and append the negative $log_{10}$ p-values
+```
+
+```{r}
+# Sucessull model fitting for:
+joinLM %>% na.omit() %>% nrow()
+```
+
+
+## Number of unique tRNA genes for which all Individuals had values.
+
+```{r NuniqtRNAgenes}
+length(levels(droplevels(joinS$tRNAname)))
+```
+
+```{r}
+# N tRNAs with sucessfull models
+joinLM %>% na.omit() %>% select(tRNAname) %>% unique() %>% nrow()
+```
+
+
+# GWS tRNA genes
+
+tRNA genes with data points at >= 1 CpG at all 3 time points
+
+```{r}
+levels(droplevels(joinS[joinS$tRNAname %in% GenWideSigWintRNAg,]$tRNAname))
+length(levels(droplevels(joinS[joinS$tRNAname %in% GenWideSigWintRNAg,]$tRNAname)))
+joinS %>% filter(tRNAname %in% GenWideSigWintRNAg) %>% nrow()
+```
+
+```{r}
+# N GWS tRNAs with sucessfull models
+joinLM %>% na.omit() %>% select(tRNAname) %>% filter(tRNAname %in% GenWideSigWintRNAg) %>% unique() %>% nrow()
+```
+
+
+# Select Significant sites
+
+```{r sigRes}
+alpha <- 0.05
+bonfer <- alpha/nrow(joinS)
+
+# alpha
+joinLMsig <- joinLM[which(joinLM$pvalue<alpha),]
+nrow(joinLMsig)
+
+# bonferoni corrected
+joinLMbn <- joinLM[which(joinLM$pvalue<bonfer),]
+nrow(joinLMbn)
+```
+
+## Which tRNAs significant in this set overlap with those found in the EpiTwins data
+
+### Genome wide
+
+```{r gwsOverSelect}
+#joinLMsig[which(GenWideSigWintRNAg %in% joinLMsig$tRNAname),]
+joinLMsig[which(joinLMsig$tRNAname %in% GenWideSigWintRNAg),]
+```
+
+### local
+
+```{r sOverSelect}
+joinLMsigLsig <- joinLMsig[which(joinLMsig$tRNAname %in% SigWintRNAg),]
+joinLMsigLsig
+```
+
+```{r}
+sigSigtRNA <- levels(droplevels(joinLMsigLsig$tRNAname))
+joinLMsigSig <- joinLM[which(joinLM$tRNAname %in% sigSigtRNA),]
+joinLMsigSig
+```
+
+
+# Exploring data Properties
+
+## Whole set p-value distribution
+
+### Slope and P-value distribution
+
+
+```{r explorPlots}
+ggplot(joinLM,aes(negLog10P,slope))+geom_point()
+qplot(joinLM$slope)
+qplot(joinLM$negLog10P)
+joinLM$GWS <- joinLM$tRNAname %in% GenWideSigWintRNAg
+ggplot(joinLM,aes(slope,negLog10P)) + geom_point(aes(colour=GWS))
+```
+
+## EpiTwins Top tRNA genes
+
+```{r gwsSelect}
+#rep <- joinLM[which(GenWideSigWintRNAg %in% joinLM$tRNAname),]
+rep <- joinLM[which(joinLM$tRNAname %in% GenWideSigWintRNAg),]
+#tRNAgeRep <- bbgwstRNAs[c(-2,-4,-5)]
+#rep <- joinLM[which(joinLM$tRNAname %in% bbgwstRNAs),]
+#rep <- joinLM[which(joinLM$tRNAname %in% bbswstRNAs),]
+rep <- joinLM[which(joinLM$tRNAname %in% bbswstRNAsbl),]
+#rep <- joinLM[which(joinLM$tRNAname %in% tRNAgeRep),]
+
+dim(rep)
+```
+
+### Slope and P-value distribution
+
+```{r gwsExporPlots}
+qplot(rep$negLog10P)
+qplot(rep$slope)
+ggplot(rep,aes(slope,negLog10P)) + geom_point()
+```
+
+# Data Visualisations
+
+## All tRNAs
+
+### Methylation distribution, age trend and Trend by CpG
+
+```{r MethAgePlots}
+if(!file.exists("graphics")) {
+	dir.create("graphics", showWarnings = FALSE, recursive = TRUE)
+}
+
+joinM <- melt(joinS[,c(4,7,9:11)],id.vars = c("tRNAname","start"))
+colnames(joinM)<-c("tRNAname","CpG","Age","Methylation")
+str(joinM)
+levels(joinM$Age) <- ages
+
+HeynViolin <- ggplot(joinM,aes(Age,Methylation)) + 
+    geom_jitter(size=0.2) + 
+    geom_violin(
+        aes(fill=Age),alpha=0.8,
+        draw_quantiles = c(0.25, 0.5, 0.75)
+    ) +
+    stat_summary(
+        aes(group = 1),#y=value,
+        fun.y = mean,
+        geom = "line",
+        size = 1
+    )
+# NB Age must be factor
+HeynViolin
+ggsave(HeynViolin,filename = "graphics/HeynViolin_BL.png",width = 8,height = 4.5)
+
+joinM$Age <- as.double(as.character(joinM$Age))
+joinM$CpG <- as.factor(joinM$CpG)
+colnames(joinM)<-c("tRNAname","CpG","Age","Methylation")
+
+HeynLine <- ggplot(joinM,aes(Age,Methylation)) + 
+    geom_point(size=0.2) + 
+    geom_smooth(method = lm)
+HeynLine
+ggsave(HeynLine,filename = "graphics/HeynLine_BL.png",width = 8,height = 4.5)
+
+HeynCross <- ggplot(joinM,aes(Age,Methylation,group=CpG)) + 
+    geom_point(size=0.2) + 
+    geom_line(aes(color=CpG)) + 
+    theme(legend.position='none') + 
+    scale_y_continuous()
+HeynCross
+ggsave(HeynCross,filename = "graphics/HeynCross_BL.png",width = 8,height = 4.5)
+```
+
+### Split by tRNA
+
+#### Split by tRNA Function
+
+```{r crossplotFxn}
+plot <- function (DF,name)
+{
+    p <- ggplot(DF,aes(Age,Methylation,group=CpG)) + 
+        geom_point(size=0.2) + 
+        geom_line(aes(color=CpG)) + 
+        theme(legend.position='none') + 
+        #scale_y_continuous() +
+        ylim(0,1)+
+        ggtitle(name)
+    return(p)
+}
+
+crossPlot <- function(LST)
+{
+    for (i in 1:length(LST))
+    {
+        name <- names(LST[i])
+        DF <- LST[[i]]
+        if(nrow(DF)>0)
+        {
+            #pdf(file = paste("graphics/",name,".pdf"))
+        	p <- plot(DF,name)
+        	#ggsave(p,filename = paste0("graphics/",name,".png"), width = 8,height = 4.5)
+            print(p)
+            #dev.off()
+        }
+    }
+}
+```
+
+These plots show one line for each CpG in a given tRNA, with its methylation value at the 3 ages. Examining the data in this manner should reveal if changes in different CpGs exhibit different trends. 
+
+```{r crossPlot}
+# CpGsBytRNA <- split(joinM,joinM$tRNAname)
+# crossPlot(CpGsBytRNA)
+```
+
+## EpiTwins Top tRNA genes
+
+### Methylation distribution, age trend and Trend by CpG
+
+```{r gwsMethAgePlots}
+repM <- melt(rep[,c(4,7,9:11)],id.vars = c("tRNAname","start"))
+colnames(repM)<-c("tRNAname","CpG","Age","Methylation")
+str(repM)
+levels(repM$Age) <- ages
+
+gwsViolinHeyn <- 
+    ggplot(repM, aes(Age, Methylation)) + 
+    geom_jitter(size = 0.2) + 
+    geom_violin(
+        aes(fill = Age), alpha = 0.8,
+        draw_quantiles = c(0.25, 0.5, 0.75)
+    ) +
+    stat_summary(
+        aes(group = 1),#y=value,
+        fun.y = mean,
+        geom = "line",
+        size = 1
+    ) # NB Age must be factor
+ggsave(gwsViolinHeyn,filename = "graphics/gwsViolinHeyn_BL.png",width = 8,height = 4.5)
+gwsViolinHeyn
+
+repM$Age <- as.double(as.character(repM$Age))
+repM$CpG <- as.factor(repM$CpG)
+colnames(repM)<-c("tRNAname","CpG","Age","Methylation")
+
+gwsScatterHeyn <- ggplot(repM,aes(Age,Methylation)) + 
+    geom_point(size=0.2) + 
+    geom_smooth(method = lm)
+
+ggsave(gwsScatterHeyn,filename = "graphics/gwsScatterHeyn_BL.png",width = 8,height = 4.5)
+gwsScatterHeyn
+
+gwsCrossHeyn <- ggplot(repM,aes(Age,Methylation,group=CpG)) + 
+    geom_point(size=0.2) + 
+    geom_line(aes(color=CpG)) + 
+    theme(legend.position='none') + 
+    scale_y_continuous()
+ggsave(gwsCrossHeyn,filename = "graphics/gwsCrossHeyn_BL.png",width = 8,height = 4.5)
+gwsCrossHeyn
+```
+
+```{r}
+allVsBBsws23 <- 
+    gwsViolinHeyn + theme_bw() + theme(legend.position = "none") + labs(subtitle = "A") + 
+    HeynViolin + theme_bw() + labs(subtitle = "B")
+wrap_elements(allVsBBsws23) + ggtitle('Heyn')
+```
+
+```{r}
+longMeth <- 
+joinLM %>% 
+    select(tRNAname,chr,start,starts_with("meth")) %>%
+    group_by(tRNAname,chr,start) %>%
+    tidyr::gather(key = age, value = meth,starts_with("meth")) %>%
+    tidyr::extract(age,into = "age",regex = "(\\d+)", convert = TRUE) %>%
+    arrange(age) %>%
+    mutate(age = factor(age, unique(age), ordered = TRUE)) %>%
+    mutate(meth  = meth * 100) %>%
+    ungroup()
+
+longMeth %>%
+    filter(tRNAname %in% bbgwstRNAs) %>%
+    distinct(tRNAname)
+
+ntRNAsbl <- 
+longMeth %>%
+    filter(!tRNAname %in% bltRNAs) %>%
+    distinct(tRNAname) %>%
+    nrow()
+ntRNAsbl
+
+ngws <- longMeth %>%
+    filter(tRNAname %in% bbgwstRNAsbl) %>%
+    distinct(tRNAname) %>%
+    nrow()
+ngws
+
+nsws <-
+longMeth %>%
+    filter(tRNAname %in% bbswstRNAsbl) %>%
+    distinct(tRNAname) %>%
+    nrow()
+nsws
+```
+
+```{r,fig.width=6,fig.height=3}
+violinFacetedPlotter <- function(df, tRNAs2Split, name, otherNm){
+    df %>%
+        mutate(tRNAge = ifelse(tRNAname %in% tRNAs2Split, name, otherNm)) %>%
+        mutate(tRNAge = factor(tRNAge,c(name,otherNm), ordered = TRUE)) %>%
+        #name = deparse(substitute(tRNAs2Split))
+        ggplot(aes(age, meth)) + 
+        geom_jitter(size = 0.2,width = 0.2) + 
+        geom_violin(
+            aes(fill = age), alpha = 0.6,
+            draw_quantiles = c(0.25, 0.5, 0.75),
+            show.legend = FALSE
+        ) +
+        stat_summary(
+            aes(group = 1),#y=value,
+            fun.y = mean,
+            geom = "line",
+            size = 1
+        ) +
+        facet_wrap(~tRNAge) + 
+        theme_bw() + 
+        labs(
+            x = "Age /yrs",
+            y = "Methylation /%"
+        )
+}
+
+heynViolinBBgws <- violinFacetedPlotter(
+    longMeth,
+    bbgwstRNAsbl,
+    glue::glue("GWS ({ngws})"),
+    glue::glue("Other ({ntRNAsbl - ngws})")
+)
+heynViolinBBgws
+
+heynViolinBBsws <- violinFacetedPlotter(
+    longMeth,
+    bbswstRNAsbl,
+    glue::glue("SWS ({nsws})"),
+    glue::glue("Other ({ntRNAsbl - nsws})")
+)
+heynViolinBBsws
+```
+
+```{r}
+ggsave(
+    heynViolinBBgws,
+    filename = "./graphics/heynViolinBBgws_BL.png",
+    width = 6,
+    height = 3
+)
+ggsave(
+    heynViolinBBsws,
+    filename = "./graphics/heynViolinBBsws_BL.png",
+    width = 6,
+    height = 3
+)
+```
+
+
+```{r}
+WRStests <- 
+bind_rows(
+    longMeth %>%
+        filter(tRNAname %in% bbswstRNAsbl) %>%
+        filter(age != 103) %>%
+        #mutate(age = as.character(age)) %>%
+        wilcox.test(meth ~ age, data=., alternative = "less", correct = FALSE, conf.int = TRUE) %>%
+        broom::tidy() %>%
+        mutate(name = "0 Vs 26"),
+    
+    longMeth %>%
+        filter(tRNAname %in% bbswstRNAsbl) %>%
+        filter(age != 0) %>%
+        #mutate(age = as.character(age)) %>%
+        wilcox.test(meth ~ age, data=., alternative = "less", correct = FALSE, conf.int = TRUE) %>%
+        broom::tidy() %>%
+        mutate(name = "26 VS 103"),
+    
+    longMeth %>%
+        filter(tRNAname %in% bbswstRNAsbl) %>%
+        filter(age != 26) %>%
+        #mutate(age = as.character(age)) %>%    
+        wilcox.test(meth ~ age, data=., alternative = "less", correct = FALSE, conf.int = TRUE) %>%
+        broom::tidy() %>%
+        mutate(name = "0 Vs 103")
+) %>%
+    mutate(p.value_f = ifelse(p.value < 0.05,sprintf("%.2e",p.value),"NS"))
+
+WRStests
+```
+
+
+```{r,fig.width=6,fig.height=3}
+heynViolinBBswsLabelled <- 
+{longMeth %>%
+        mutate(
+            tRNAge = ifelse(
+                tRNAname %in% bbswstRNAsbl,
+                glue::glue("SWS ({nsws})"),
+                glue::glue("Other ({ntRNAsbl - nsws})")
+            )
+        ) %>%
+        mutate(
+            tRNAge = factor(
+                tRNAge, c(
+                    glue::glue("SWS ({nsws})"),
+                    glue::glue("Other ({ntRNAsbl - nsws})")
+                ), ordered = TRUE)
+        ) %>%
+        filter(tRNAname %in% bbswstRNAsbl) %>%
+        #name = deparse(substitute(tRNAs2Split))
+        ggplot(aes(age, meth)) + 
+        geom_jitter(size = 0.2,width = 0.2) + 
+        geom_violin(
+            aes(fill = age), alpha = 0.6,
+            draw_quantiles = c(0.25, 0.5, 0.75),
+            show.legend = FALSE
+        ) +
+        stat_summary(
+            aes(group = 1),#y=value,
+            fun.y = mean,
+            geom = "line",
+            size = 1
+        ) +
+        facet_wrap(~tRNAge) + 
+        theme_bw() + 
+        lims(y = c(0, 100)) + 
+        labs(
+            x = "Age /yrs",
+            y = "Methylation /%"
+        ) + 
+        ggsignif::geom_signif(
+            y_position = c(75, 88, 98), 
+            xmin = c("0", "26", "0"),
+            xmax = c("26", "103", "103"),
+            #annotation = c("NS", "***", "***"),
+            annotation = WRStests$p.value_f,
+            tip_length = 0
+        )
+} + {longMeth %>%
+        mutate(
+            tRNAge = ifelse(
+                tRNAname %in% bbswstRNAsbl,
+                glue::glue("SWS ({nsws})"),
+                glue::glue("Other ({ntRNAsbl - nsws})")
+            )
+        ) %>%
+        mutate(
+            tRNAge = factor(
+                tRNAge, c(
+                    glue::glue("SWS ({nsws})"),
+                    glue::glue("Other ({ntRNAsbl - nsws})")
+                ), ordered = TRUE
+            )
+        ) %>%
+        filter(!tRNAname %in% bbswstRNAsbl) %>%
+        #name = deparse(substitute(tRNAs2Split))
+        ggplot(aes(age, meth)) + 
+        geom_jitter(size = 0.2,width = 0.2) + 
+        geom_violin(
+            aes(fill = age), alpha = 0.6,
+            draw_quantiles = c(0.25, 0.5, 0.75),
+            show.legend = FALSE
+        ) +
+        stat_summary(
+            aes(group = 1),#y=value,
+            fun.y = mean,
+            geom = "line",
+            size = 1
+        ) +
+        facet_wrap(~tRNAge) + 
+        theme_bw() + 
+        lims(y = c(0, 100)) + 
+        labs(
+            x = "Age /yrs",
+            y = "Methylation /%"
+        )
+}
+heynViolinBBswsLabelled
+```
+
+```{r}
+ggsave(
+    heynViolinBBswsLabelled,
+    filename = "./graphics/heynViolinBBswsLabelled_BL.png",
+    width = 6,
+    height = 3
+)
+```
+
+```{r, fig.width=4, fig.height=3}
+heynViolinBBswsOnlyLabelled <-
+longMeth %>%
+        mutate(
+            tRNAge = ifelse(
+                tRNAname %in% bbswstRNAsbl,
+                glue::glue("SWS ({nsws})"),
+                glue::glue("Other ({ntRNAsbl - nsws})")
+            )
+        ) %>%
+        mutate(
+            tRNAge = factor(
+                tRNAge, c(
+                    glue::glue("SWS ({nsws})"),
+                    glue::glue("Other ({ntRNAsbl - nsws})")
+                ), ordered = TRUE)
+        ) %>%
+        filter(tRNAname %in% bbswstRNAsbl) %>%
+        #name = deparse(substitute(tRNAs2Split))
+        ggplot(aes(age, meth)) + 
+        geom_jitter(size = 0.2,width = 0.2) + 
+        geom_violin(
+            aes(fill = age), alpha = 0.6,
+            draw_quantiles = c(0.25, 0.5, 0.75),
+            show.legend = FALSE
+        ) +
+        stat_summary(
+            aes(group = 1),#y=value,
+            fun.y = mean,
+            geom = "line",
+            size = 1
+        ) +
+        facet_wrap(~tRNAge) + 
+        theme_bw() + 
+        lims(y = c(0, 100)) + 
+        labs(
+            x = "Age /yrs",
+            y = "Methylation /%"
+        ) + 
+        ggsignif::geom_signif(
+            y_position = c(75, 88, 98), 
+            xmin = c("0", "26", "0"),
+            xmax = c("26", "103", "103"),
+            #annotation = c("NS", "***", "***"),
+            annotation = WRStests$p.value_f,
+            tip_length = 0
+        )
+heynViolinBBswsOnlyLabelled
+```
+
+```{r}
+ggsave(
+    heynViolinBBswsOnlyLabelled,
+    filename = "./graphics/heynViolinBBswsOnlyLabelled_BL.png",
+    width = 4,
+    height = 3
+)
+```
+
+### Split by tRNA
+
+```{r crossPlotgws}
+CpGsBytRNAgws <- split(repM,repM$tRNAname)
+crossPlot(CpGsBytRNAgws)
+```
+
+```{r crossplotGridFxn,fig.width=12,fig.height=6.75}
+
+# CpGsBytRNAgwsL <- lapply(CpGsBytRNAgws, function(x){
+# 	x$CpG <- factor(x$CpG,labels = letters[1:length(levels(droplevels(x$CpG)))])
+# 	return(x)
+# })
+
+
+CpGsBytRNAgwsL <- CpGsBytRNAgws
+for(i in 1:length(CpGsBytRNAgws)){
+	CpGsBytRNAgwsL[[i]]$CpG <- factor(CpGsBytRNAgwsL[[i]]$CpG,labels = letters[1:length(levels(droplevels(CpGsBytRNAgwsL[[i]]$CpG)))])
+}
+
+CpGsBytRNAgwsDF <-  do.call(rbind,CpGsBytRNAgwsL)
+
+
+gwsHeyn2012CpGsBytRNA <- ggplot(CpGsBytRNAgwsDF,aes(Age,Methylation,group=CpG)) + 
+    geom_point(size=0.2) + 
+    geom_line(aes(color=CpG)) + 
+    theme(legend.position='none') + 
+    #scale_y_continuous() +
+    ylim(0,1)+
+    labs(title="tRNAge genes: CpG methylation from the Heyn 2012 WGBS dataset",
+    	 subtitle="Newborn (0), Adult (26), Centenarian (103); 1 line per CpG",
+    	 x="Age / yrs")+
+	facet_wrap(~tRNAname)+
+	theme(strip.text = element_text(face="bold",size = 10), axis.title = element_text(size = 10))
+
+gwsHeyn2012CpGsBytRNA
+
+ggsave(gwsHeyn2012CpGsBytRNA,filename = "graphics/gwsHeyn2012CpGsBytRNA_BL.png", width = 12,height = 6.75)
+
+
+```
+
+## tRNAs with hits significant in this data which are in the locally significant Epitwins set
+
+### Methylation distribution, age trend and Trend by CpG
+
+```{r sigSigMethAgePlots}
+joinLMsigSigM <- melt(joinLMsigSig[,c(4,7,9:11)],id.vars = c("tRNAname","start"))
+colnames(joinLMsigSigM)<-c("tRNAname","CpG","Age","Methylation")
+str(joinLMsigSigM)
+levels(joinLMsigSigM$Age) <- ages
+
+ggplot(joinLMsigSigM,aes(Age,Methylation)) + geom_jitter(size=0.2) + geom_violin(aes(fill=Age),alpha=0.8) # NB Age must be factor
+
+joinLMsigSigM$Age <- as.double(as.character(joinLMsigSigM$Age))
+joinLMsigSigM$CpG <- as.factor(joinLMsigSigM$CpG)
+colnames(joinLMsigSigM)<-c("tRNAname","CpG","Age","Methylation")
+
+ggplot(joinLMsigSigM,aes(Age,Methylation)) + 
+    geom_point(size=0.2) + 
+    geom_smooth(method = lm)
+
+ggplot(joinLMsigSigM,aes(Age,Methylation,group=CpG)) + 
+    geom_point(size=0.2) + 
+    geom_line(aes(color=CpG)) + 
+    theme(legend.position='none') + 
+    scale_y_continuous()
+
+
+```
+
+### Split by tRNA
+
+```{r crossPlotSigSig}
+CpGsBytRNASigSig <- split(joinLMsigSigM,joinLMsigSigM$tRNAname)
+crossPlot(CpGsBytRNASigSig)
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+

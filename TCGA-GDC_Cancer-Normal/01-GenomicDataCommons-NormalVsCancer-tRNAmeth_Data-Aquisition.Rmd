@@ -1,0 +1,294 @@
+---
+title: "01 - GenomicDataCommons Normal Vs. Cancer tissue tRNA gene methylation - Data Aquisition"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+bibliography: "`r normalizePath('../library.bib')`"
+---
+
+# Introduction
+
+RNA gene methylation in cancer Vs normal tissue with age
+
+# Set-up
+
+## libs
+
+```{r}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(GenomicDataCommons)
+	library(lubridate)
+	library(broom)
+})
+```
+
+## local data
+
+### tRNA array probes
+
+```{r}
+tRNAprobes <- 
+read_delim(	
+	delim = "\t",
+	file = "../tRNA-GtRNAdb/450k_coresponding_hg19tRNAs.bed",
+	col_types = "ciicciiciciicccc",
+	col_names = c("pChr","pStart","pEnd","probeID",
+		as.character(
+			read_delim(
+				delim = "\t",
+				file = "../tRNA-GtRNAdb/std_tRNA_header.txt",
+				col_names = FALSE,
+				col_types = paste0(rep("c",12),collapse = "")
+			)
+		)
+	)
+)
+
+```
+
+### tRNAge gene set
+
+```{r}
+tRNAge <- read_delim(
+	delim = "\t",
+	 col_names = "tRNAname",
+	 col_types = "c",
+	 file = "../tRNA-GtRNAdb/GenWideSigWintRNAs.txt"
+) %>%
+	pull()
+```
+
+# GDC data
+
+## Check GDC connection
+
+```{r}
+GenomicDataCommons::status()
+```
+
+## Get file list
+
+```{r}
+qfiles <- files() %>% 
+	filter(~ type == 'methylation_beta_value')
+qfiles <- qfiles %>%
+			GenomicDataCommons::select(available_fields("files"))
+
+# qfiles <- qfiles %>%
+	# GenomicDataCommons::select(
+	# 	c(default_fields("files"),
+	# 	#'cases.samples.tissue_type',
+	# 	'cases.samples.sample_type',
+	# 	'cases.demographic.age_at_index',
+	# 	'cases.case_id',
+	# 	'analysis.workflow_type'
+	# 	)
+	# )
+```
+
+## get file meta data
+
+```{r}
+#respX <- (qfiles %>% response())
+resp <- (qfiles %>% response_all())
+```
+
+## Fxn: extract relevant meta-data
+
+(some missing value filtering)
+
+```{r}
+sampleInfo <- function(resp){
+
+	id <- 
+	resp$results[,"file_id"] #%>%
+	
+	name <- 
+	resp$results[,"file_name"] #%>%
+		#cbind()
+	name <- name %>% as.data.frame()
+	name$id <- id
+	# tissue type
+	sample_type <- 
+	resp$results[,"cases"] %>%
+		lapply(.,function(x){(x$samples %>% unlist())["sample_type"]}) %>%#$sample_type
+		do.call(rbind,.)
+	
+	sampleID <- 
+	resp$results[,"cases"] %>%
+		lapply(.,function(x){(x$samples %>% unlist())["sample_id"]}) %>%#$sample_type
+		do.call(rbind,.)
+	
+	YOB <- 
+	resp$results[,"cases"] %>%
+		lapply(.,function(x){x$demographic$year_of_birth}) %>%
+		do.call(rbind,.)
+	
+	caseID <- 
+	resp$results[,"cases"] %>%
+		lapply(.,function(x){x$case_id}) %>%
+		do.call(rbind,.)
+	
+	DTD <- 
+	resp$results[,"cases"] %>%
+		lapply(.,function(x){(x$diagnoses %>% unlist())["age_at_diagnosis"]}) %>%#$age_at_diagnosis
+		do.call(rbind,.)
+	#DTD <- DTD[rownames(DTD)%in%id,]
+	
+	Diag <- 
+	resp$results[,"cases"] %>%
+		lapply(.,function(x){(x$diagnoses %>% unlist())["primary_diagnosis"]}) %>%#["disease_type"]
+		do.call(rbind,.)
+	
+	DT <- 
+	resp$results[,"cases"] %>%
+		lapply(.,function(x){(x$project %>% unlist())["disease_type"]}) %>%#["disease_type"]
+		do.call(rbind,.)
+	
+	PS <- 
+	resp$results[,"cases"] %>%
+		lapply(.,function(x){(x$project %>% unlist())["primary_site"]}) %>%#["disease_type"]
+		do.call(rbind,.)
+	
+	res <- inner_join(
+		DTD %>% as.data.frame() %>% rownames_to_column(var="id"),
+		YOB %>% as.data.frame() %>% rownames_to_column(var="id"),
+		by = "id"
+	) %>% inner_join(
+		.,
+		sample_type %>% as.data.frame() %>% rownames_to_column(var="id"),
+		by = "id"
+	) %>% inner_join(
+		.,
+		name,
+		by = "id"
+	) %>% inner_join(
+		.,
+		Diag %>% as.data.frame() %>% rownames_to_column(var="id"),
+		by = "id"
+	) %>% inner_join(
+		.,
+		DT %>% as.data.frame() %>% rownames_to_column(var="id"),
+		by = "id"
+	) %>% inner_join(
+		.,
+		PS %>% as.data.frame() %>% rownames_to_column(var="id"),
+		by = "id"
+	) %>% inner_join(
+		.,
+		sampleID %>% as.data.frame() %>% rownames_to_column(var="id"),
+		by = "id"
+	) %>% inner_join(
+		.,
+		caseID %>% as.data.frame() %>% rownames_to_column(var="id"),
+		by = "id"
+	) 
+	
+	colnames(res) <- c(	
+		"file_id","days_to_diagnosis",
+		"year_of_birth","sample_type",
+		"file_name","primary_diagnosis",
+		"disease_type","primary_site",
+		"sample_id","case_id"
+	)
+	res <- res %>% na.omit()
+	missingIDs <- id[which(!(id %in% res$file_id))]
+	return(
+		list(
+			res=res,
+			missingIDs=missingIDs
+		)
+	)
+}
+```
+
+## process metadata (Age estimates)
+
+cross-check with horvath age?
+
+NB age is approximated by the difference between 1st of january in year of birth and days to diagnosis
+
+```{r}
+mySumRes <- sampleInfo(resp)
+mySum <- mySumRes$res
+
+customSumGetAge <- function(mySum) {
+	yob <- mySum$year_of_birth %>% parse_date_time("y")
+	d <- mySum$days_to_diagnosis %>% as.character() %>% as.numeric() %>% days()
+	yrs <- (
+		difftime((yob + d), yob, units = "days") %>%
+		as.numeric(.,units = "days")
+	)/365.242
+	return(yrs)
+}
+
+mySum$age <- customSumGetAge(mySum)
+#mySum
+```
+
+## select samples with cancer and normal data
+
+```{r}
+tumorAndNormalCases <- mySum %>%
+	dplyr::filter(sample_type %in% c("Solid Tissue Normal","Primary Tumor")) %>%
+	group_by(case_id) %>%
+	summarise(n=length(unique(sample_type))) %>%
+	dplyr::filter(n==2)
+
+pairedMeta <- mySum %>%
+	dplyr::filter(case_id %in% tumorAndNormalCases$case_id)
+```
+
+## Fxn: get beta values
+
+```{r}
+gettRNAprobes <- function(id){
+	fnames = gdcdata(id, access_method = 'client')
+	
+	left_join(
+		tRNAprobes,
+		suppressMessages(read_delim(delim = "\t",file = fnames)) %>% 
+			rename(probeID=`Composite Element REF`),
+		by="probeID"
+	)
+}
+```
+
+```{r}
+#gettRNAprobes(pairedMeta$file_id[1])
+```
+
+## Data download and subset (WARNING ~200gb multi-hour process)
+
+```{r}
+dataTest <- pairedMeta %>% 
+	mutate(data=purrr::map(file_id, gettRNAprobes))
+```
+
+```{r}
+saveRDS(
+	dataTest,
+	file = "../data/tRNAprobesNormCancerArrayPairs.Rds"
+)
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References
+

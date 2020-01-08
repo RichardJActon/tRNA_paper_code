@@ -1,0 +1,391 @@
+---
+title: "Pooled Samples for Targeted Bis-seq: EPIC array data"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+bibliography: "`r normalizePath(params$bib)`"
+params:
+  bib: "../library.bib"
+---
+
+# Intro
+
+# Set-up
+
+## Libs
+
+```{r}
+library(meffil)
+library(tidyverse)
+library(data.table)
+library(EpiDISH)
+```
+
+```{r}
+if(!dir.exists("out")) {
+	dir.create("out", showWarnings = FALSE, recursive = TRUE)
+}
+if(!dir.exists("graphics")) {
+	dir.create("graphics", showWarnings = FALSE, recursive = TRUE)
+}
+```
+
+# Data Read-in
+
+## Sample meta data
+
+```{r}
+sampleMetaData <- read_delim(
+	file = "data/sampleMetaDataProcessed.tab", ##!! not public?
+	delim = "\t",
+	col_types = "cdcccdidc",
+	col_names = TRUE
+)
+```
+
+```{r}
+# get the mean age of the samples in the pools
+meanAgeByPool <- sampleMetaData %>% 
+	group_by(pool) %>%
+	summarise(age = mean(age)) %>%
+	rename(Sample_Name=pool) # rename for combining with samplesheet
+```
+
+## Array Data
+
+```{r}
+samplesheet <- meffil.read.samplesheet(
+	base = "data/", # dir with IDATs ## !! to be released on GEO
+	pattern = "GC-CB-7769_Infinium_HD_EPIC_SampleSheet_310718_sex.csv"
+)
+```
+
+add mean samples ages to samplesheet
+
+```{r}
+samplesheet <- left_join(samplesheet, meanAgeByPool, by = "Sample_Name")
+```
+
+# Intial QC
+
+```{r}
+qc.objects <- meffil.qc(
+	samplesheet, cell.type.reference = "blood gse35069", verbose = TRUE
+)
+saveRDS(
+	qc.objects,file = "data/data_gitIg/targetedBSseqEPICQCobjects.Rds"
+)
+```
+
+```{r, eval = FALSE}
+qc.objects <- readRDS(
+	file = "data/data_gitIg/targetedBSseqEPICQCobjects.Rds"
+)
+```
+
+```{r}
+#meffil.qc.parameters()#see which qc parameters are available
+qc.parameters <- meffil.qc.parameters(#set QC parameters
+	beadnum.samples.threshold             = 0.1,
+	detectionp.samples.threshold          = 0.1,
+	detectionp.cpgs.threshold             = 0.1, 
+	beadnum.cpgs.threshold                = 0.1,
+	sex.outlier.sd                        = 5
+)
+qc.summary <- meffil.qc.summary(#summarise QC
+	qc.objects,
+	parameters = qc.parameters
+)
+```
+
+## Generate QC report
+
+```{r}
+meffil.qc.report(
+	qc.summary,
+	output.file=paste0("out/qc-report_NEW.html")
+)
+```
+
+```{r}
+outlier <- qc.summary$bad.samples
+table(outlier$issue)
+index <- outlier$issue %in% c(
+	"Control probe (dye.bias)", 
+	"Methylated vs Unmethylated",
+	"X-Y ratio outlier",
+	"Low bead numbers",
+	"Detection p-value",
+	"Sex mismatch",
+	"Control probe (bisulfite1)",
+	"Control probe (bisulfite2)"
+)
+
+outlier <- outlier[index,]
+length(qc.objects)
+# qc.objects <- meffil.remove.samples(qc.objects, outlier$sample.name)
+# length(qc.objects)
+```
+
+# Raw beta values
+
+```{r}
+raw.betas <- meffil.load.raw.data(qc.objects)
+saveRDS(raw.betas,file = "data/targetedBSseqEPICrawBetas.Rds")
+```
+
+```{r, eval = FALSE}
+raw.betas <- readRDS(file = "data/targetedBSseqEPICrawBetas.Rds")
+```
+
+```{r}
+write.table(
+	raw.betas, file = "data/array/raw_betas.csv", sep = ",",
+	col.names = TRUE, row.names = TRUE, quote = FALSE
+)
+```
+
+### Raw beta density by pool
+
+```{r}
+rawBetaDensityByPool <- 
+raw.betas %>% 
+	as.data.frame() %>%
+	rownames_to_column(var = "probe") %>%
+	gather(key = "pool", value = "beta", `Pool 1`:`Pool 8`) %>%
+	ggplot(aes(beta)) + 
+		geom_density(aes(colour = pool))
+
+ggsave(rawBetaDensityByPool,filename = "graphics/rawBetaDensityByPool.png")
+rawBetaDensityByPool
+```
+
+# Cell Counts
+
+## Houseman
+
+```{r getCellCounts}
+getCellCounts <- function(qc.objects) {
+	cc <- t(sapply(qc.objects, function(obj) obj$cell.counts$counts))
+	cc <- data.frame(Sample_Name = row.names(cc), cc, stringsAsFactors = FALSE)
+	return(cc)
+}
+
+cc <- getCellCounts(qc.objects)
+colnames(cc) <- c(colnames(cc)[1],paste0("Houseman_", colnames(cc)[2:7]))
+samplesheet <- left_join(samplesheet, cc, by = "Sample_Name")
+```
+
+## EpiDISH
+
+```{r}
+#library(EpiDISH)
+data(centDHSbloodDMC.m)
+bloodRef1 <- centDHSbloodDMC.m[,1:6] #B-cells, CD4+ T-cells, CD8+ T-cells, NK-cells, Monocytes and Granulocytes (not Neutrophils and Eosinophils components of Granulocytes to minimise covars)
+epiDISHres <- epidish(raw.betas, bloodRef1, method = "RPC") 
+#epiDISHres$estF 
+colnames(epiDISHres$estF) <- paste0("EpiDISH_", colnames(epiDISHres$estF))
+EpiDISHcellTypeCounts <- epiDISHres$estF %>% 
+	as.data.frame() %>% rownames_to_column(var="Sample_Name")
+
+samplesheet <- left_join(samplesheet, EpiDISHcellTypeCounts, by = "Sample_Name")
+```
+
+```{r}
+#normalizePath("../data/samplesheetCellCounts.tab")
+write_tsv(samplesheet, path = "data/samplesheetCellCounts2.tab")
+```
+
+## DNAm age prediction
+
+```{r}
+DNAmAgeRes <- read.csv(
+	"data/clockProbesBetas.output.csv"
+)
+DNAmAgeRes$ChronAge <- meanAgeByPool$age
+DNAmAgeRes
+```
+
+```{r, fig.width = 6, fig.height = 6}
+max <- max(DNAmAgeRes$DNAmAge, DNAmAgeRes$ChronAge)
+r2 <- cor(DNAmAgeRes$DNAmAge, DNAmAgeRes$ChronAge)**2
+DNAmAgeVsChronAge <- DNAmAgeRes %>% 
+	select(ChronAge, DNAmAge, SampleID) %>%
+	ggplot(aes(ChronAge, DNAmAge)) + 
+		geom_abline(slope = 1, colour = "red") +
+		geom_point(size=4, aes(shape = SampleID)) + 
+		scale_shape_manual(values = rep(c(3,4),4)) +
+		ylim(0, max)+
+		xlim(0, max)+
+		geom_smooth(method = "lm") + 
+		guides(shape = FALSE) +
+		labs(
+			title = "Mean age of pool Vs predicted Age",
+			subtitle = paste0(
+				"R² = ", sprintf("%.4g", r2), " | Red line: y = 1x + 0"
+			),
+			y = "DNAmAge / yrs",
+			x = "Chronological Age / yrs"
+		)
+ggsave(
+	DNAmAgeVsChronAge,
+	filename = "graphics/DNAmAgeVsChronAge.png",
+	width = 6, height = 6
+)
+DNAmAgeVsChronAge
+```
+
+# Normalise betas
+
+## Number of PCs of the technical variation matrix to use in functional normalisation
+
+```{r}
+pcPlot <- meffil.plot.pc.fit(qc.objects)
+pcPlot$plot
+```
+
+```{r}
+pc <- 2
+```
+
+```{r}
+names(qc.objects[[1]]$quantiles)
+norm.objects <- meffil.normalize.quantiles(qc.objects, number.pcs = pc)
+```
+
+## Normalisation
+
+```{r}
+norm.beta <- meffil.normalize.samples(
+	norm.objects, cpglist.remove = qc.summary$bad.cpgs$name
+)
+saveRDS(norm.beta, file = "data/targetedBSseqEPICnormBetas.Rds")
+```
+
+```{r, eval = FALSE}
+norm.beta <- readRDS(file = "data/targetedBSseqEPICnormBetas.Rds")
+```
+
+### normalised beta density by pool
+
+```{r}
+normBetaDensityByPool <- 
+norm.beta %>% 
+	as.data.frame() %>%
+	rownames_to_column(var = "probe") %>%
+	gather(key = "pool",value = "beta",`Pool 1`:`Pool 8`) %>%
+	ggplot(aes(beta)) + 
+		geom_density(aes(colour = pool))
+ggsave(normBetaDensityByPool, filename = "graphics/normBetaDensityByPool.png")
+normBetaDensityByPool
+```
+
+# tRNA probes
+
+```{r}
+# tRNAprobeIntersection <- read.table(
+# 	file = "../tRNA-GtRNAdb/EPIC_probesBytRNA_full.txt",
+# 	sep = "\t", header = TRUE
+# )
+```
+
+## probes in tRNA +/- 100bp
+
+```{r}
+tRNAprobeIntersection <- read_tsv(
+	file = "../tRNA-GtRNAdb/EPIC_coresponding_hg19tRNAs-100bp53.bed",
+	col_names = c(
+		"pChr","pStart","pEnd","probe","tChr",
+		"tStart","tEnd","tRNAname","score",
+		"strand","thickStart","thickEnd","RGB",
+		"blockCount","blockSizes","blockStarts"
+	)
+)
+
+```
+
+```{r}
+GWStRNAs <- unlist(
+	read.table(
+		"../tRNA-GtRNAdb/GenWideSigWintRNAs.txt",
+		sep = "\t", stringsAsFactors=FALSE
+	),
+	use.names = FALSE
+)
+# add a column to the data with 'tRNAge' gene set membership
+tRNAprobeIntersection$GWS <- tRNAprobeIntersection$tRNAname %in% GWStRNAs
+```
+
+```{r}
+# get a characer vector of probes in tRNA genes
+tRNAprobes <- unlist(tRNAprobeIntersection$probe, use.names = FALSE)
+```
+
+```{r}
+# number of probes on EPIC overlapping tRNAs
+tRNAprobes %>% length()
+# number of tRNA genes with EPIC probes
+tRNAprobeIntersection$tRNAname %>% unique() %>% length()
+```
+
+# tRNA betas
+
+```{r}
+# combine betas and tRNA data for probes in tRNA genes
+tRNAprobesWithBetas <- left_join(
+	by = "probe",
+	tRNAprobeIntersection %>% mutate(probe = as.character(probe)),
+	norm.beta[rownames(norm.beta) %in% tRNAprobes,] %>% as.data.frame() %>% 
+		rownames_to_column(var = "probe")
+) %>% 
+	gather(key = "pool", value = "beta", `Pool 1`:`Pool 8`) %>% # betas in long format
+	select(-score, -RGB, -blockCount, -blockSizes, -blockStarts) %>% 
+	extract(
+		tRNAname, c("nmt", "aa", "codon"),
+		"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-", remove = FALSE
+	) %>%
+	na.omit()
+```
+
+```{r}
+# add age data to tRNA and betas
+tRNAprobesWithBetas <- left_join(
+	tRNAprobesWithBetas, meanAgeByPool %>% rename(pool = Sample_Name), by="pool"
+)
+```
+
+## tRNAge loci methylation
+
+```{r, fig.width = 16, fig.height = 9}
+GWStRNAbetasPlot <- tRNAprobesWithBetas %>%
+	filter(GWS == TRUE) %>%
+	ggplot(aes(age, beta, group = tRNAname)) +
+		#geom_line(aes(colour=aa))
+		geom_point(aes(colour = probe)) +
+		geom_smooth(method = "lm", aes(colour = tRNAname), se = TRUE) + 
+		facet_wrap(~ tRNAname + tChr, scales = "free") + 
+		guides(colour = FALSE)
+ggsave(
+	GWStRNAbetasPlot, filename = "graphics/GWStRNAbetasPlot.png",
+	width = 16, height = 9
+)
+GWStRNAbetasPlot
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References

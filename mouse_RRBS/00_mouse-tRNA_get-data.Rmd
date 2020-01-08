@@ -1,0 +1,212 @@
+---
+title: "mouse tRNA - get data"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+    keep_md: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+#runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+---
+
+# Introduction
+
+Using mouse RRBS sequencing data from [@Petkovich2017] [GSE80672](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE80672) and mouse tRNA data from GtRNAdb [@Chan2009] to examine changes in tRNA gene DNAm with Age.
+
+Downloading data and sample selection
+
+# Set-up
+
+## Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+    library(tidyverse)
+    library(here)
+    library(GEOquery)
+    library(plyranges)
+    library(future)
+})
+```
+
+# Functions
+
+```{r}
+# returns file path
+downloadGEO <- function(geo, dest = "./data/geo/") {
+	if(!dir.exists(dest)) {
+		dir.create(dest)
+	}
+	fnm <- getGEOSuppFiles(geo, fetch_files = FALSE, makeDirectory = FALSE)$fname %>% 
+		as.character()
+	if(!file.exists(paste0(dest,fnm))) {
+		fnm <- rownames(
+			getGEOSuppFiles(
+				geo, baseDir = dest,
+				makeDirectory = FALSE
+			)
+		)
+	}
+	return(fnm)
+}
+```
+
+# Data Read-in
+
+## tRNAs
+
+```{r}
+if(!file.exists("data/mm10-tRNAs.bed")) {
+	download.file(
+		"http://gtrnadb.ucsc.edu/genomes/eukaryota/Mmusc10/mm10-tRNAs.tar.gz",
+		destfile = "data/mm10-tRNAs.tar.gz"
+	)
+	untar("data/mm10-tRNAs.tar.gz",exdir = "data")
+	file.remove("data/mm10-tRNAs.tar.gz")
+}
+```
+
+```{r}
+mousetRNAs <- rtracklayer::import.bed("data/mm10-tRNAs.bed", genome = "mm10")
+mousetRNAs
+```
+
+## Methylation Data
+
+### Chromosome name lookup table
+
+```{r}
+if(!file.exists("data/GCF_000001635.26_GRCm38.p6_assembly_report.txt")) {
+	download.file(
+		"ftp://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/000/001/635/GCF_000001635.26_GRCm38.p6/GCF_000001635.26_GRCm38.p6_assembly_report.txt",
+		destfile = "data/GCF_000001635.26_GRCm38.p6_assembly_report.txt",
+		method = "curl"
+	)
+}
+```
+
+### Sample Metadata
+
+```{r}
+# mouseDat <- getGEO("GSE80672") 
+# getGEO currently has parsing errors - going manual
+```
+
+```{r}
+if(!file.exists("data/GSE80672_matrix.txt.gz")) {
+	download.file(
+		"ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE80nnn/GSE80672/matrix/GSE80672_series_matrix.txt.gz",
+		destfile = "data/GSE80672_matrix.txt.gz",
+		method = "curl"
+	)
+}
+```
+
+parsing sample metadata
+
+```{r}
+tmp <- 
+read_tsv("data/GSE80672_matrix.txt.gz", col_names = FALSE, skip = 32L) %>% 
+    head(47) %>%
+    mutate(X1 = gsub("!","",X1)) %>%
+    t() %>% 
+    as_tibble()
+
+header <- tmp %>% head(1)
+tmp <- tmp %>% tail(-1)
+
+header <- c(
+    header %>% 
+        select(V1:V9) %>%
+        unlist() %>%
+        gsub(pattern = "Sample_",replacement = ""),
+    
+    tmp %>% 
+        dplyr::slice(1) %>% 
+        select(V10:V15) %>% 
+        mutate_all(~gsub(.,pattern = "(.*):.*",replacement = "\\1")) %>% 
+        unlist()
+)
+
+sampledata <- tmp %>% 
+    select(V1:V15) %>%
+    mutate_all(~gsub(.,pattern = ".*: (.*)",replacement = "\\1"))
+
+colnames(sampledata) <- header
+sampledata
+```
+
+### Sample Selection
+
+selecting only samples from the C57BL/6 mouse strain whole blood samples
+
+```{r}
+selectedSamples <- 
+sampledata %>%
+    filter(strain == "C57BL/6")
+```
+
+```{r}
+selectedSamples %>%
+    write_tsv("data/selectedSamples.tsv")
+```
+
+### Meth data download 
+
+function test
+
+```{r}
+# testfile <- 
+# selectedSamples$geo_accession[1] %>%
+#     downloadGEO()
+```
+
+Data Download
+
+```{r, eval=FALSE}
+downloadedSamples <- 
+selectedSamples %>%
+    mutate(
+        local_files = map_chr(
+            geo_accession, downloadGEO
+        )
+    )
+```
+
+```{r, eval=FALSE}
+downloadedSamples %>%
+    write_tsv("data/downloaded_samples_manifest.tsv")
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>
+

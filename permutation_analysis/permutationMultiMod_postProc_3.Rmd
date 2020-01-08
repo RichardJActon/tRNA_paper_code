@@ -1,0 +1,293 @@
+---
+title: "simple CpGd permutation analysis post processing"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+#runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+  phdPath: "/scratch/rja1e16/PhD_git/"
+  threshold: 45
+  inFile: "out/out_gitIg/tRNA_CpGd_perm_t45_N1000.Rds"
+  alpha: 4.338717e-9
+---
+
+# Intro
+
+# Libraries
+
+```{r}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(plyranges)
+	library(future)
+	library(furrr)
+})
+```
+
+```{r}
+if(!dir.exists("out")) {
+	dir.create("out", showWarnings = FALSE, recursive = TRUE)
+}
+if(!dir.exists("graphics")) {
+	dir.create("graphics", showWarnings = FALSE, recursive = TRUE)
+}
+```
+
+# Functions
+
+```{r}
+collapseGRL <- function(grl) { 
+	purrr::imap(grl, ~plyranges::mutate(.x, perm = .y)) %>% 
+		Reduce("c", .)
+}
+```
+
+```{r}
+sigCounter <- function(gr, threshold, direc) {
+	dir <- switch(
+		direc,
+		"+" = 1,
+		"-" = -1,
+		"either" = c(1, -1)
+	)
+	Np <- max(gr$perm)
+	gr %>%
+		plyranges::group_by(perm) %>% 
+		plyranges::filter(BB_p < threshold, sign(BB_slope) %in% dir) %>%
+		plyranges::summarise(nsig = n()) %>%
+		as_tibble() %>%
+		mutate(direction = direc) %>%
+		tidyr::complete( # fill Zeros when no windows in perm
+			perm = 1:Np,
+			fill = list(nsig = 0, direction = direc)
+		)
+}
+```
+
+```{r}
+allDirSigCounter <- function(gr, threshold) {
+	purrr::map(c("+", "-", "either"), ~sigCounter(gr, threshold, .x)) %>%
+		dplyr::bind_rows()
+}
+```
+
+```{r}
+countCombiner <- function(res, threshold) {
+	bind_rows(
+		res$lociWins %>% 
+			mutate(perm = 1) %>% 
+			allDirSigCounter(threshold) %>%
+			mutate(type = "Experimental"),
+		res$permRes %>%
+			allDirSigCounter(threshold) %>%
+			mutate(type = "Permutation")
+	)
+}
+```
+
+!! directional ep...
+
+```{r}
+getEmpiricalP <- function(comb, direc) {
+	exp <- comb %>% filter(type == "Experimental", direction == direc)
+	perms <- comb %>% filter(type == "Permutation", direction == direc)
+	
+	nexp <- exp %>% pull(nsig)
+	npermGE <- perms %>% filter(nsig > nexp) %>% nrow()
+	nperm <- perms %>% pull(perm) %>% max()
+	
+	ep <- (npermGE + 1) / (nperm + 1)
+	tibble(direction = direc, empirical_p = ep)
+}
+```
+
+```{r}
+allDirEP <- function(comb) {
+	purrr::map(c("+", "-", "either"), ~getEmpiricalP(comb, .x)) %>%
+		dplyr::bind_rows()
+}
+```
+
+# Data Read-in
+
+```{r}
+results <- readRDS(glue::glue("{params$phdPath}{params$inFile}"))
+results$permRes <- collapseGRL(results$permRes)
+```
+
+```{r}
+comb <- countCombiner(results, params$alpha)
+```
+
+```{r}
+eps <- allDirEP(comb)
+eps
+```
+
+```{r}
+sharedPlotElements <- function(comb, alpha) {
+	ggplot(comb, aes(nsig)) + 
+		geom_histogram(
+			data = comb %>% filter(type == "Permutation"),
+			binwidth = 1L
+		) + 
+		geom_vline(
+			data = comb %>% filter(type == "Experimental"),
+			aes(xintercept = nsig, colour = "red")
+		) + 
+		theme_bw() + 
+		guides(
+			colour = guide_legend(title = "Number of\nSignificant\nExprimental\nWindows")
+		) +
+		labs(
+			title = "CpG Density Permutation Analysis",
+			x = "Number of Significant Windows",
+			caption = paste0(
+				"alpha = ", sprintf("%.3e", alpha),
+				", N = ", format(max(comb$perm), big.mark = ",")
+			)
+		)
+}
+```
+
+```{r}
+plotBydir <- function(comb, alpha) {
+	sharedPlotElements(comb, alpha) + 
+		facet_wrap(~direction)
+}
+```
+
+```{r, fig.width = 7, fig.height = 3}
+combinedPlot <- plotBydir(comb, params$alpha)
+combinedPlot
+```
+
+```{r}
+runname <- gsub(
+	params$inFile,
+	pattern = ".*\\/(.*)\\.Rds",
+	replacement = "\\1"
+)
+```
+
+```{r}
+ggsave(
+	plot = combinedPlot,
+	filename = paste0("../graphics/", runname, "_combined_perm_hist.png"),
+	width = 7,
+	height = 3
+)
+```
+
+```{r}
+indiPlots <- 
+comb %>% 
+	group_by(direction) %>%
+	do(plots = sharedPlotElements(., params$alpha))
+indiPlots %>% pull(plots) 
+```
+
+```{r}
+purrr::walk2(indiPlots$direction, indiPlots$plots,
+	~ggsave(
+		plot = .y,
+		filename = paste0("../graphics/", runname, "_", .x, "_permHist.png"),
+		width = 5,
+		height = 4
+	)
+)
+```
+
+CpGd dist plot
+
+```{r}
+CpGdData <- function(res) {
+	bind_rows(
+		res$permRes %>% as_tibble() %>% 
+			dplyr::select(perm, CpGpc) %>% 
+			dplyr::mutate(type = "Permutation"),
+		res$lociWins %>% as_tibble() %>% 
+			dplyr::select(CpGpc) %>% 
+			dplyr::mutate(perm = 1, type = "Experimental")
+	)
+}
+```
+
+```{r}
+CpGdDistPlot <- function(res) {
+	dat <- CpGdData(res)
+	ggplot(dat, aes(CpGpc, colour = type)) + 
+		geom_density(
+			data = dat %>% filter(type == "Permutation"),
+			show.legend = FALSE,
+			aes(group = perm),
+			alpha = 0.6
+		) +
+		geom_density(
+			data = dat %>% filter(type == "Experimental"),
+			show.legend = FALSE,
+			aes(group = perm)
+		) +
+		scale_colour_manual(
+			values = c(
+				"Experimental" = "red", 
+				"Permutation" = "black"
+			)
+		) +
+		theme_bw() +
+		labs(
+			title = "Experimental Vs Permuted CpG Density",
+			subtitle = "Red = Experimental",
+			x = "CpG density /%"
+		)
+
+}
+```
+
+```{r, fig.width = 5, fig.height = 3}
+CpGdDistPlot <- CpGdDistPlot(results)
+CpGdDistPlot
+```
+
+```{r}
+ggsave(
+	plot = CpGdDistPlot,
+	filename = paste0("graphics/", runname, "_CpGdDist.png"),
+	width = 5,
+	height = 4
+)
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>
+

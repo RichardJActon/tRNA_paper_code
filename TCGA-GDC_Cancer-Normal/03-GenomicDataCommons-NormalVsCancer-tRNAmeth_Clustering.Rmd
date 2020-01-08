@@ -1,0 +1,627 @@
+---
+title: "03 - GenomicDataCommons Normal Vs. Cancer tissue tRNA gene methylation - Clustering"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+bibliography: "`r normalizePath('../library.bib')`"
+---
+
+# Set-up
+
+## Environment
+
+```{r}
+if(!dir.exists("graphics")) {
+	dir.create("graphics", showWarnings = FALSE, recursive = TRUE)
+}
+```
+
+## libs
+
+```{r}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(lubridate)
+	library(broom)
+	library(psych)
+	library(heatmaply)
+	library(patchwork)
+	library(ComplexHeatmap)
+	library(circlize)
+})
+```
+
+## Data Read-In
+
+### tRNA array probes
+
+```{r}
+tRNAprobes <- 
+read_delim(	
+	delim = "\t",
+	file = "../tRNA-GtRNAdb/450k_coresponding_hg19tRNAs.bed",
+	col_types = "ciicciiciciicccc",
+	col_names = c("pChr","pStart","pEnd","probeID",
+		as.character(
+			read_delim(
+				delim = "\t",
+				file = "../tRNA-GtRNAdb/std_tRNA_header.txt",
+				col_names = FALSE,
+				col_types = paste0(rep("c",12),collapse = "")
+			)
+		)
+	)
+)
+
+```
+
+### tRNAge gene set
+
+```{r}
+tRNAge <- read_delim(
+	delim = "\t",
+	 col_names = "tRNAname",
+	 col_types = "c",
+	 file = "../tRNA-GtRNAdb/GenWideSigWintRNAs.txt"
+) %>%
+	pull()
+
+tRNAgeBB <- read_delim(
+	delim = "\t",
+	 col_names = "tRNAname",
+	 col_types = "c",
+	 file = "../tRNA-GtRNAdb/BB_GWS_tRNA.txt"
+) %>%
+	pull()
+```
+
+### tRNA gene data
+
+```{r}
+tRNA <- read.table("../tRNA-GtRNAdb/hg19-tRNAs-SeqStrPseu.bed") 
+
+colnames(tRNA) <- 
+c(
+	as.character(
+		read.table(
+			"../tRNA-GtRNAdb/std_tRNA_header.txt",
+			stringsAsFactors = FALSE
+		)
+	),
+	"pseudo","str","seq"
+)
+
+tRNA <- tRNA %>%
+	extract(tRNAname,
+			c("nmt","aa","codon"),
+			"(\\w*)-?tRNA-(i?\\w{3})(?:\\w+)?-(\\w+)-",
+			remove = FALSE
+	)
+
+```
+
+### Methylation Data
+
+```{r}
+dataTest <- readRDS(
+	file = "data/tRNAprobesNormCancerArrayPairs.Rds"
+)
+```
+
+```{r}
+dataTest %>%  dplyr::as_tibble() %>% distinct(case_id,age) %>% nrow()
+range(dataTest$age)
+```
+
+```{r}
+tRNAmethCancerNormal <- dataTest %>% 
+	unnest() %>% 
+	as_tibble() %>%
+	filter(sample_type %in% c("Solid Tissue Normal", "Primary Tumor")) %>%
+	mutate(tRNAge = tRNAname %in% tRNAge) %>%
+	filter(!is.na(Beta_value))
+
+```
+
+# Clustering
+
+```{r}
+#FF7f00 - orange High methylation
+#800080 - purple middling
+#0000CD - blue low meth
+# black - NA
+
+#ensmbl
+#ffff00 - yellow low meth
+#19ff00 - green middle
+#0033cc - blue high meth
+
+col_fun <- colorRamp2(c(0, 0.5, 1), c("#ffff00", "#19ff00", "#0033cc"))
+#col_fun <- colorRamp2(c(0, 0.5, 1), c("#0000CD", "#800080", "#FF7f00"))
+# na_col = "black"
+# col = col_fun
+
+```
+
+```{r}
+#tRNAprobes
+tRNAProbeLookUp <- 
+tRNAmethCancerNormal %>% 
+	dplyr::select(probeID,tRNAname) %>% 
+	distinct()
+
+tRNAProbeLookUpColour <- left_join(
+	tRNAProbeLookUp,
+	data.frame(
+		"colour"=colorspace::rainbow_hcl(tRNAProbeLookUp$tRNAname %>% unique() %>% length()),
+		"tRNAname"=tRNAProbeLookUp$tRNAname %>% unique()
+	),
+	by="tRNAname"
+)
+```
+
+```{r}
+betasByTissue <- 
+tRNAmethCancerNormal %>% 
+	#head(n=1000) %>% 
+	dplyr::select(probeID,primary_site,Beta_value) %>% 
+	group_by(primary_site) %>%
+	mutate(index = row_number()) %>%
+	spread(primary_site,Beta_value) %>%
+	dplyr::select(-index)
+
+betasByTissueM <- 
+betasByTissue %>% dplyr::select(-probeID) %>% as.matrix()
+rownames(betasByTissueM) <- betasByTissue$probeID
+
+```
+
+## Cancer and Normal By Probe
+
+```{r, fig.height = 8, fig.width = 7}
+betasByTissueX <- 
+tRNAmethCancerNormal %>% 
+	#head(n=1000) %>% 
+	dplyr::select(probeID,primary_site,Beta_value) %>% 
+	group_by(primary_site) %>%
+	mutate(index = row_number()) %>%
+	spread(primary_site,Beta_value) %>%
+	dplyr::select(-index) #%>%
+	#as.matrix() 
+meanBetasByTissue <- 
+betasByTissueX %>% 
+	group_by(probeID) %>%
+	summarise_all(mean,na.rm=TRUE)
+
+
+meanBetasByTissueM <- 
+meanBetasByTissue %>% 
+	dplyr::select(-probeID) %>% 
+	as.matrix()
+rownames(meanBetasByTissueM) <- meanBetasByTissue$probeID
+meanBetasByTissueM <- meanBetasByTissueM %>% na.omit()
+
+# tmp <- tRNAProbeLookUpColour %>% 
+# 		dplyr::filter(probeID %in% rownames(meanBetasByTissueM)) %>% 
+# 		pull(colour)
+# names(tmp) <- tRNAProbeLookUpColour %>% 
+# 		dplyr::filter(probeID %in% rownames(meanBetasByTissueM)) %>% 
+# 		pull(tRNAname)
+# tmp <- tmp %>% as.factor()
+
+tmp <- tRNAProbeLookUpColour$colour
+names(tmp) <- tRNAProbeLookUpColour$probeID 
+
+heatmaply::heatmaply(
+	meanBetasByTissueM#,
+	# row_side_colors = rownames(meanBetasByTissueM),
+	# row_side_palette = #tmp,
+	
+	#RowSideColors = tmp
+		# tRNAProbeLookUpColour %>% 
+		# dplyr::filter(probeID %in% rownames(meanBetasByTissueM)) %>% 
+		# pull(colour)
+)
+#heatmaply::heatmapr(meanBetasByTissueM)
+```
+
+```{r}
+# meanBetasByTissueMna <- 
+# meanBetasByTissue %>% 
+# 	dplyr::select(-probeID) %>% 
+# 	as.matrix()
+# rownames(meanBetasByTissueMna) <- meanBetasByTissue$probeID
+# 
+# heatmaply_na(meanBetasByTissueMna) # !!!
+```
+
+## Cancer and Normal by tRNA
+
+```{r, fig.height = 8, fig.width = 7}
+betasByTissueT <- 
+tRNAmethCancerNormal %>% 
+	#head(n=1000) %>% 
+	dplyr::select(probeID,tRNAname,primary_site,Beta_value) %>% 
+	group_by(primary_site) %>%
+	mutate(index = row_number()) %>%
+	spread(primary_site,Beta_value) %>%
+	dplyr::select(-index) #%>%
+	#as.matrix() 
+meanBetasByTissueT <- 
+betasByTissueT %>% 
+	dplyr::select(-probeID) %>%
+	group_by(tRNAname) %>%
+	summarise_all(mean,na.rm=TRUE)
+
+
+meanBetasByTissueTM <- 
+meanBetasByTissueT %>% 
+	dplyr::select(-tRNAname) %>% 
+	as.matrix()
+rownames(meanBetasByTissueTM) <- meanBetasByTissueT$tRNAname
+meanBetasByTissueTM <- meanBetasByTissueTM %>% na.omit()
+
+heatmaply::heatmaply(
+	meanBetasByTissueTM,
+	main = "Mean methylation by tRNA across Cancer and Normal Samples",
+	limits=c(0,1)
+)
+#heatmaply::heatmapr(meanBetasByTissueM)
+
+meanBetasByTissueTMHeatmap <- 
+meanBetasByTissueTM %>%
+Heatmap(
+	heatmap_width = unit(5.5,"inches"),
+	heatmap_height = unit(7.5,"inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Mean methylation by tRNA\nCombined Cancer and Normal Samples",
+	name = "Meth",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB,"red","black")
+	),
+	na_col = "black",
+	col = col_fun,
+	row_title = "tRNA gene"
+)
+
+
+png(
+	filename = "graphics/meanBetasByTissueTMHeatmap.png",
+	width = 7, height = 8, units = "in", res = 192
+)
+meanBetasByTissueTMHeatmap
+dev.off()
+
+meanBetasByTissueTMHeatmap
+
+meanBetasByTissueTMaaSplitHeatmap <- 
+meanBetasByTissueTM %>%
+Heatmap(
+	#col = methColFunc,
+	heatmap_width = unit(5.5,"inches"),
+	heatmap_height = unit(7.5,"inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Mean methylation by tRNA\nCombined Cancer and Normal Samples",
+	name = "Meth",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_split = rownames(.) %>%
+		gsub(pattern = "tRNA-(\\w+)-\\w+-\\w+-\\d+",replacement = "\\1"),
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB,"red","black")
+	),
+	na_col = "black",
+	col = col_fun,
+	row_title = "tRNA gene"
+)
+
+png(
+	filename = "graphics/meanBetasByTissueTMaaSplitHeatmap.png",
+	width = 7, height = 8, units = "in", res = 192
+)
+meanBetasByTissueTMaaSplitHeatmap
+dev.off()
+
+meanBetasByTissueTMaaSplitHeatmap
+```
+
+## Cancer by tRNA
+
+```{r,fig.height=8,fig.width=7}
+betasByTissueTC <- 
+tRNAmethCancerNormal %>% 
+	dplyr::filter(sample_type == "Primary Tumor") %>%
+	#head(n=1000) %>% 
+	dplyr::select(probeID,tRNAname,primary_site,Beta_value) %>% 
+	group_by(primary_site) %>%
+	mutate(index = row_number()) %>%
+	spread(primary_site,Beta_value) %>%
+	dplyr::select(-index) #%>%
+	#as.matrix() 
+meanBetasByTissueTC <- 
+betasByTissueTC %>% 
+	dplyr::select(-probeID) %>%
+	group_by(tRNAname) %>%
+	summarise_all(mean,na.rm=TRUE)
+
+
+meanBetasByTissueTCM <- 
+meanBetasByTissueTC %>% 
+	dplyr::select(-tRNAname) %>% 
+	as.matrix()
+rownames(meanBetasByTissueTCM) <- meanBetasByTissueTC$tRNAname
+meanBetasByTissueTCM <- meanBetasByTissueTCM %>% na.omit()
+
+heatmaply::heatmaply(
+	meanBetasByTissueTCM,
+	main = "Mean methylation by tRNA In Primary Tumour Samples",
+	limits=c(0,1)
+)
+#heatmaply::heatmapr(meanBetasByTissueM)
+
+meanBetasByTissueTCMHeatmap <- 
+meanBetasByTissueTCM %>%
+Heatmap(
+	heatmap_width = unit(5.5,"inches"),
+	heatmap_height = unit(7.5,"inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Mean methylation by tRNA\nIn Primary Tumour Samples",
+	name = "Meth",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB,"red","black")
+	),
+	na_col = "black",
+	col = col_fun,
+	row_title = "tRNA gene"
+)
+
+
+png(
+	filename = "graphics/meanBetasByTissueTCMHeatmap.png",
+	width = 7, height = 8, units = "in", res = 192
+)
+meanBetasByTissueTCMHeatmap
+dev.off()
+
+meanBetasByTissueTCMHeatmap
+
+meanBetasByTissueTCMaaSplitHeatmap <- 
+meanBetasByTissueTCM %>%
+Heatmap(
+	#col = methColFunc,
+	heatmap_width = unit(5.5,"inches"),
+	heatmap_height = unit(7.5,"inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Mean methylation by tRNA\nIn Primary Tumour Samples",
+	name = "Meth",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_split = rownames(.) %>%
+		gsub(pattern = "tRNA-(\\w+)-\\w+-\\w+-\\d+",replacement = "\\1"),
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB,"red","black")
+	),
+	na_col = "black",
+	col = col_fun,
+	row_title = "tRNA gene"
+)
+
+png(
+	filename = "graphics/meanBetasByTissueTCMaaSplitHeatmap.png",
+	width = 7, height = 8, units = "in", res = 192
+)
+meanBetasByTissueTCMaaSplitHeatmap
+dev.off()
+
+meanBetasByTissueTCMaaSplitHeatmap
+```
+
+## Normal by tRNA
+
+```{r,fig.height=8,fig.width=7}
+betasByTissueTN <- 
+tRNAmethCancerNormal %>% 
+	dplyr::filter(sample_type == "Solid Tissue Normal") %>%
+	#head(n=1000) %>% 
+	dplyr::select(probeID,tRNAname,primary_site,Beta_value) %>% 
+	group_by(primary_site) %>%
+	mutate(index = row_number()) %>%
+	spread(primary_site,Beta_value) %>%
+	dplyr::select(-index) #%>%
+	#as.matrix() 
+meanBetasByTissueTN <- 
+betasByTissueTN %>% 
+	dplyr::select(-probeID) %>%
+	group_by(tRNAname) %>%
+	summarise_all(mean,na.rm=TRUE)
+
+
+meanBetasByTissueTNM <- 
+meanBetasByTissueTN %>% 
+	dplyr::select(-tRNAname) %>% 
+	as.matrix()
+rownames(meanBetasByTissueTNM) <- meanBetasByTissueTN$tRNAname
+meanBetasByTissueTNM <- meanBetasByTissueTNM %>% na.omit()
+
+heatmaply::heatmaply(
+	meanBetasByTissueTNM,
+	main = "Mean methylation by tRNA In Solid Tissue Normal Samples",
+	limits=c(0,1)
+)
+#heatmaply::heatmapr(meanBetasByTissueM)
+#tRNAgeBB
+```
+
+```{r}
+#methColFunc <- circlize::colorRamp2(c(0,0.5,1),c("blue","white","orange"))
+meanBetasByTissueTNMHeatmap <- 
+meanBetasByTissueTNM %>%
+Heatmap(
+	heatmap_width = unit(5.5,"inches"),
+	heatmap_height = unit(7.5,"inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Mean methylation by tRNA\nIn Solid Tissue Normal Samples",
+	name = "Meth",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB,"red","black")
+	),
+	na_col = "black",
+	col = col_fun,
+	row_title = "tRNA gene"
+)
+
+png(
+	filename = "graphics/meanBetasByTissueTNMHeatmap.png",
+	width = 7, height = 8, units = "in", res = 192
+)
+meanBetasByTissueTNMHeatmap
+dev.off()
+
+meanBetasByTissueTNMHeatmap
+```
+
+```{r}
+meanBetasByTissueTNMaaSplitHeatmap <- 
+meanBetasByTissueTNM %>%
+Heatmap(
+	#col = methColFunc,
+	heatmap_width = unit(5.5,"inches"),
+	heatmap_height = unit(7.5,"inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Mean methylation by tRNA\nIn Solid Tissue Normal Samples",
+	name = "Meth",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_split = rownames(.) %>%
+		gsub(pattern = "tRNA-(\\w+)-\\w+-\\w+-\\d+",replacement = "\\1"),
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB,"red","black")
+	),
+	na_col = "black",
+	col = col_fun,
+	row_title = "tRNA gene"
+)
+
+png(
+	filename = "graphics/meanBetasByTissueTNMaaSplitHeatmap.png",
+	width = 7, height = 8, units = "in", res = 192
+)
+meanBetasByTissueTNMaaSplitHeatmap
+dev.off()
+
+meanBetasByTissueTNMaaSplitHeatmap
+```
+
+```{r,fig.width=7,fig.height=7}
+pseudoSplit <- tRNA$pseudo
+names(pseudoSplit) <- tRNA$tRNAname
+
+meanBetasByTissueTNMpseudoSplitHeatmap <- 
+meanBetasByTissueTNM %>%
+Heatmap(
+	#col = methColFunc,
+	heatmap_width = unit(5.5,"inches"),
+	heatmap_height = unit(7.5,"inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Mean methylation by tRNA\nIn Solid Tissue Normal Samples",
+	name = "Meth",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_split = pseudoSplit[rownames(.)],
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB,"red","black")
+	),
+	na_col = "black",
+	col = col_fun,
+	row_title = "tRNA gene"
+)
+
+png(
+	filename = "graphics/meanBetasByTissueTNMpseudoSplitHeatmap.png",
+	width = 7, height = 8, units = "in", res = 192
+)
+meanBetasByTissueTNMpseudoSplitHeatmap
+dev.off()
+
+meanBetasByTissueTNMpseudoSplitHeatmap
+```
+
+```{r}
+meanBetasByTissueTNM %>% dim()
+#meanBetasByTissueTNM %>% rownames()
+
+meanBetasByTissueTCM %>% dim()
+#meanBetasByTissueTCM %>% rownames()
+```
+
+```{r,fig.height=8,fig.width=7}
+meanBetasByTissueTCMx <- meanBetasByTissueTNM[meanBetasByTissueTCM %>% rownames(),]
+heatmaply::heatmaply(
+	file = "graphics/changeDNANormCancerbytRNA.html",
+	(meanBetasByTissueTCM - meanBetasByTissueTCMx),
+	#(meanBetasByTissueTCM - meanBetasByTissueTCMx)/meanBetasByTissueTCMx,
+	main = "Differnce between Mean methylation in Normal and Cancer Samples by tRNA (Cancer - Normal)",
+	limits=c(-1,1)
+)
+```
+
+# Variance
+
+```{r, fig.width = 6, fig.height = 7}
+byVar <- function(x,name) {
+	tRNAColc <- paste0("tRNA_",name)
+	tRNACol <- sym(tRNAColc)
+	varCol <- sym(paste0("var_",name))
+	x %>%
+		apply(1,var) %>% 
+		as.data.frame() %>% 
+		rownames_to_column(var = tRNAColc) %>% 
+		rename(!!varCol := !!expr(.)) %>%
+		arrange(desc(!!varCol)) %>%
+		#mutate(!!tRNACol := as.factor(!!tRNACol)) %>%#as.ordered
+		ggplot(aes(reorder(!!tRNACol,!!varCol),!!varCol)) + 
+			geom_col() + 
+			labs(
+				x=name,
+				y="variance"
+			) +
+			coord_flip()
+}
+
+byVar(meanBetasByTissueTNM,"normal") + 
+byVar(meanBetasByTissueTCM,"cancer") +
+plot_annotation(title = "tRNAs by rank order of variance")
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References
+

@@ -1,0 +1,463 @@
+---
+title: "DNAm age changes proportionate to genome size"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+    keep_md: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+#runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+---
+
+# Intro
+
+# Set-up
+
+## Libs
+
+```{r}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(magrittr)
+	library(BSgenome.Hsapiens.UCSC.hg19)
+	library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+	library(rtracklayer)
+	library(AnnotationHub)
+	library(plyranges)
+})
+```
+
+# Data Read-in
+
+```{r}
+ah <- AnnotationHub()
+```
+
+```{r}
+CGIanno <- 
+ah %>% 
+	query("Homo Sapiens") %>% 
+	query("hg19") %>% 
+	query("CpG Islands")
+CGIanno
+```
+
+```{r}
+CGIs <- ah[[names(CGIanno)]]
+```
+
+```{r}
+#gws <- 0.05
+gws <- 4.338717e-09
+sws <- 0.05 / 598 # nrow(tRNAwinLookup)
+sws
+```
+
+```{r}
+txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
+```
+
+# Fxn
+
+```{r}
+getNSigWins <- function(model, threshold, featureSet = NULL, dir = NULL, dat) {
+	#dat <- modelData
+	if(!is.null(featureSet)) {
+		dat <- 
+		dat %>%
+			filter_by_overlaps(featureSet)
+	}
+	
+	nWins <- length(dat)
+	
+	if(!is.null(dir)) {
+		dirf <- ifelse(dir == '+',`>`,`<`)
+		dat <- 
+		dat %>%
+			filter(dirf(BB_slope,0)) ####!!!!! make model dependent!!!
+	}
+
+	nSig <-  dat %>% 
+		filter(!!model < threshold) %>%
+		length()
+
+	data.frame(nSig = nSig, nWins = nWins, prop = nSig / nWins)
+}
+```
+
+```{r}
+readLoci <- function(path) {
+	loci <- read_tsv(
+		path,
+		col_names = c("seqnames","start","end","name","strand"),
+		col_types = "ciicc"
+	) %>% plyranges::as_granges()
+
+	loci <- GenomeInfoDb::keepSeqlevels(
+		loci,
+		paste0("chr",1:22), pruning.mode = "coarse"
+	)
+	return(loci)
+}
+```
+
+
+```{r}
+exonsGR <- exons(txdb)
+promotersGR  <- promoters(txdb)
+```
+
+```{r}
+polycomb <- readLoci("data/polycombPromoters.bed")
+bivalent <- readLoci("data/bivalentPromoters.bed")
+bivalentPromP <- readLoci("data/wgEncodeAwgSegmentationChromhmmGm12878_PromP_ids_5col.bed")
+tRNAs <- readLoci("../tRNA-GtRNAdb/hg19-tRNAs_5col.bed")
+```
+
+```{r}
+tRNAsNoPolycomb <- filter_by_non_overlaps(tRNAs, polycomb)
+tRNAsNoBivalent <- filter_by_non_overlaps(tRNAs, bivalent)
+tRNAsNoBivalentPromP <- filter_by_non_overlaps(tRNAs, bivalentPromP)
+
+tRNAsNoPolyBivP <- filter_by_overlaps(tRNAsNoPolycomb, tRNAsNoBivalentPromP) 
+tRNAsNoPolyBiv <- filter_by_overlaps(tRNAsNoPolycomb, tRNAsNoBivalent) 
+```
+
+```{r}
+phdDir <- "/scratch/rja1e16/PhD_git/"
+modelDataBL <- readRDS(glue::glue("{phdDir}Projects/tRNA_Stuff/EpiTwin/data/data_gitIg/BloodBatchCpGd3001_blacklistFiltered.Rds"))
+modelData <- readRDS(glue::glue("{phdDir}Projects/tRNA_Stuff/EpiTwin/data/data_gitIg/BloodBatchCpGd3001.Rds"))
+```
+
+```{r}
+filter_by_non_overlaps(tRNAs, modelDataBL)
+```
+
+```{r}
+makeSets <- function(models, thresholds, features, dirs) {
+	nMods <- length(models)
+	nDirs <- length(dirs)
+	nThresh <- length(thresholds)
+	nFeat <- length(features)
+	nCombPerMod <- nThresh * nDirs
+	list(
+		model = syms(rep(models, nCombPerMod * nFeat)),
+		threshold = rep(thresholds, nDirs * nFeat),
+		feature = rep(rep(features, each = nThresh), each = nDirs),
+		dir = rep(rep(dirs, each = nThresh), nFeat)
+	)
+}
+```
+
+```{r}
+sets <- makeSets(
+	c("BloodBatch" = "BB_p"),
+	c("gws" = gws, "sws" = sws),
+	list(
+		"tRNAs" = tRNAs,  
+		"tRNAsNoPolyBivP" = tRNAsNoPolyBivP,  
+		"tRNAsNoPolyBiv" = tRNAsNoPolyBiv,  
+		"tRNAsNoPolycomb" = tRNAsNoPolycomb,  
+		"tRNAsNoBivalent" = tRNAsNoBivalent,  
+		"tRNAsNoBivalentPromP" = tRNAsNoBivalentPromP,  
+		"polycomb" = polycomb,
+		"bivalent" = bivalent,
+		"bivalentPromP" = bivalentPromP,
+		"exons" = exonsGR, 
+		"CGI" = CGIs, 
+		"promoters" = promotersGR,
+		"WholeGenome" = NULL
+	),
+	list("+" = "+", "-" = "-","either" = NULL)
+)
+sapply(sets,length)
+as_tibble(sets)
+```
+
+
+```{r}
+#res <- mapply(FUN = getNSigWins, sets$model, sets$threshold, sets$feature)
+#res <- vector("list", length = length(sets[[1]]))
+getRes <- function(sets, dat) {
+	res <- NULL
+	for (i in seq_along(sets[[1]])) {
+		name <- paste0(
+			c(
+				names(sets$model[i]),
+				names(sets$threshold[i]),
+				names(sets$feature[i]),
+				names(sets$dir[i])
+			),
+			collapse = "_"
+		)
+		print(name)
+		res[[name]] <- getNSigWins(
+			sets$model[[i]],
+			sets$threshold[[i]],
+			sets$feature[[i]],
+			sets$dir[[i]],
+			dat
+		)
+	}
+	res <- bind_rows(res) %>% 
+		mutate(name = names(res)) %>%
+		tidyr::separate(
+			name, 
+			into = c("model", "thresh", "feature", "dir"),
+			sep = "_",
+			remove = FALSE
+		)
+	res
+}
+```
+
+# Fishers
+
+```{r}
+getContingencyTable <- function(res) {
+	res %>%
+	as.data.frame() %>%
+	mutate(nNotSig = nWins - nSig) %>%
+	magrittr::set_rownames(.$name) %>%
+	select(nSig, nNotSig) %>%
+	data.matrix() %>%
+	t()
+}
+```
+
+## Fishers funcs
+
+```{r}
+compareTo <- function(df, feat) {
+	nms <- df %>% filter(feature != feat) %>% pull(name)
+	comp <- df %>% filter(feature == feat) %>% pull(name)
+	# glue::glue("`{comp}` ~ `{nms}`") %>% 
+	glue::glue("c('{comp}','{nms}')") %>% 
+		enframe() %>% 
+		select(form = value)
+}
+```
+
+```{r}
+compareToTest <- function(df, feat) {
+	contab <- getContingencyTable(df)
+	df %>% 
+		compareTo(feat) %>%
+		mutate(
+			fishersExact = map(form, ~fisher.test(
+				contab[,eval(parse(text = .x))],
+				alternative = "less"
+			))
+		) %>% 
+		mutate(res = map(fishersExact, broom::tidy)) %>% 
+		unnest(res) %>% 
+		tidyr::extract(
+			form, into = c("referenceSet","testSet"), 
+			regex = "c\\(\\'(.*)\\',\\'(.*)\\'\\)"
+		)
+}
+```
+
+```{r}
+writeFishersRes <- function(dat, outPath) {
+	dat %>% 
+		select(-fishersExact) %>%
+		write_tsv(path = outPath)
+}
+```
+
+```{r}
+compareToTestWrite <- function(df, feat, outPath) {
+	testRes <- compareToTest(df, feat)
+	writeFishersRes(testRes, outPath)
+	return(testRes)
+}
+```
+
+```{r} 
+withCounts <- function(fishersTab, df) {
+	left_join(
+		fishersTab %>% select(-fishersExact), 
+		df %>% dplyr::rename(testSet = name), 
+		by = "testSet"
+	) %>% 
+	bind_rows(
+		  df %>% 
+			  dplyr::filter(name == fishersTab$referenceSet[1]) %>% 
+			  dplyr::rename(testSet = name)
+	)
+}
+```
+
+```{r}
+withCountsWrapper <- function(df, feat, countPath, testPath) {
+	testRes <- compareToTestWrite(df, feat, countPath)
+	testResWithCount <- withCounts(testRes, df)
+	write_tsv(testResWithCount, path = testPath) 
+	return(
+		list(
+			countsOnly = testRes,
+			withTests = testResWithCount
+		)
+	)
+}
+```
+
+# compare to whole genome
+
+## nbl
+
+```{r}
+res <- getRes(sets, modelData)
+```
+
+```{r}
+if(!dir.exists("out")) {
+	dir.create("out", showWarnings = FALSE, recursive = TRUE)
+}
+```
+
+```{r}
+WGfishers <- withCountsWrapper(
+	res %>% filter(model == "BloodBatch", thresh == "gws", dir == "+"),
+	"WholeGenome",
+	"out/WholeGenomeVsAllFishers_BB_gws_hyper_2.tsv",
+	"out/nSigWinProps_WGfishers_BB_gws_hyper2.tsv"
+)
+WGfishers$countsOnly %>% select(-fishersExact)
+WGfishers$withtests
+```
+
+```{r}
+WGfishers <- withCountsWrapper(
+	res %>% filter(model == "BloodBatch", thresh == "sws", dir == "+"),
+	"WholeGenome",
+	"out/WholeGenomeVsAllFishers_BB_sws_hyper_2.tsv",
+	"out/nSigWinProps_WGfishers_BB_sws_hyper2.tsv"
+)
+WGfishers$countsOnly %>% select(-fishersExact)
+WGfishers$withtests
+```
+
+vs CGI
+
+```{r}
+WGfishers <- withCountsWrapper(
+	res %>% filter(model == "BloodBatch", thresh == "gws", dir == "+"),
+	"CGI",
+	"out/CGIVsAllFishers_BB_gws_hyper_2.tsv",
+	"out/nSigWinProps_CGIfishers_BB_gws_hyper2.tsv"
+)
+WGfishers$countsOnly %>% select(-fishersExact)
+WGfishers$withtests
+```
+
+## blacklist
+
+```{r}
+resBL <- getRes(sets, modelDataBL)
+```
+
+```{r}
+WGfishers <- withCountsWrapper(
+	resBL %>% filter(model == "BloodBatch", thresh == "gws", dir == "+"),
+	"WholeGenome",
+	"out/WholeGenomeVsAllFishers_BB_gws_hyper_2_BL.tsv",
+	"out/nSigWinProps_WGfishers_BB_gws_hyper_2_BL.tsv"
+)
+WGfishers$countsOnly %>% select(-fishersExact)
+WGfishers$withtests
+```
+
+```{r}
+WGfishers <- withCountsWrapper(
+	resBL %>% filter(model == "BloodBatch", thresh == "sws", dir == "+"),
+	"WholeGenome",
+	"out/WholeGenomeVsAllFishers_BB_sws_hyper_2_BL.tsv",
+	"out/nSigWinProps_WGfishers_BB_sws_hyper_2_BL.tsv"
+)
+WGfishers$countsOnly %>% select(-fishersExact)
+WGfishers$withtests
+```
+
+# Peak numbers
+
+```{r}
+length(modelData)
+length(modelDataBL)
+```
+
+Number of significant windows in the whole genome
+
+```{r}
+modelData %>% 
+	filter(BB_p < gws) %>%
+	length()
+modelDataBL %>% 
+	filter(BB_p < gws) %>%
+	length()
+```
+
+number of 'peaks' where peak is a region of contigious windows all of which exceed the significance threshold
+
+```{r}
+modelData %>% 
+	filter(BB_p < gws) %>%
+	reduce_ranges() %>%
+	length()
+modelDataBL %>% 
+	filter(BB_p < gws) %>%
+	reduce_ranges() %>%
+	length()
+```
+
+# viz
+
+```{r}
+files <- c(
+	"out/nSigWinProps_WGfishers_BB_sws_hyper_2_BL.tsv",
+	"out/nSigWinProps_WGfishers_BB_gws_hyper_2_BL.tsv",
+	"out/nSigWinProps_WGfishers_BB_sws_hyper2.tsv",
+	"out/nSigWinProps_WGfishers_BB_gws_hyper2.tsv" 
+) 
+purrr::map(
+	files,
+	~rmarkdown::render(
+		#"proportional_age_enrichment_vis_3.Rmd",
+		"proportional_age_enrichment_vis_4.Rmd",
+		output_file = "proportional_age_enrichment_vis_1.nb.html", 
+		params = list(inFile = .x)
+	)
+)
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References
+

@@ -1,0 +1,6 @@
+tRNA-Ser-AGA-2-6
+tRNA-Ile-AAT-4-1
+tRNA-iMet-CAT-1-4
+tRNA-Met-CAT-5-1
+tRNA-Met-CAT-4-2
+tRNA-Ile-AAT-1-1

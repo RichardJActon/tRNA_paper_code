@@ -1,0 +1,354 @@
+---
+title: "MINTmap pipeline - PRJNA391912"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+# runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+bibliography: "`r normalizePath(params$bibliography)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+params:
+  pwd: "/scratch/rja1e16/PhD_git/Projects/tRNA_Stuff/tRNA_expression/src/"
+  bibliography: "~/Documents/bibtex/library.bib"
+  csl: "~/Documents/bibtex/genomebiology.csl"
+  min: 16
+  max: 50
+  minOverlap: 1
+  plan: "plan(list(tweak(batchtools_slurm,resources = list(walltime = '03:00:00',ntasks=3L))))"
+  MmRefBuildDir: "../out_run/"
+  tRNAspace: "tRNAspace_test.fa" #tRNAspace.Spliced.Sequences.MINTmap_v1.fa
+  anno: "anno_test.txt" # OtherAnnotations.MINTmap_v1.txt
+  lookup: "lookup_test.txt" #LookupTable.tRFs.MINTmap_v1.txt
+  trimmedOut: "../out/out_gitIg/PRJNA391912/trimmed/"
+  trimgalorePath: "/home/rja1e16/software/TrimGalore-0.5.0/trim_galore"
+  MINTmapPath: "/scratch/rja1e16/MINTmap/MINTmap.pl"
+  MINTplatesPath: "/scratch/rja1e16/MINTmap/MINTplates/"
+  fastqSource: "../data/PRJNA391912/"
+  MmOutPrefix: "pre-tRNA-ref"
+  MmOutDir: "../out/PRJNA391912/MmOutDir/"
+  fetchData: FALSE
+---
+
+
+# Introduction
+
+[MINTmap](https://github.com/TJU-CMC-Org/MINTmap) [@Loher2017]
+
+[MINTbase](https://cm.jefferson.edu/MINTbase/) [@Pliatsika2018]
+
+# Set-up
+
+## Dependencies beyond R
+
+- perl
+- java
+- [TrimGalore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/)
+- [cutadapt](https://cutadapt.readthedocs.io/en/stable/guide.html)
+- [fastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)
+- [multiqc](https://multiqc.info/)
+- bourne shell environment
+
+- NB using biobuilds module load from HPC environment... fix?
+
+- TODO trim option (MM only assume pre-trimmed)
+
+## Environment
+
+```{r env}
+knitr::opts_knit$set(root.dir = normalizePath(params$pwd))
+setwd(params$pwd)
+```
+
+```{r makeDirs}
+dir.create(params$MmOutDir,showWarnings = FALSE,recursive = TRUE)
+dir.create(params$trimmedOut,showWarnings = FALSE,recursive = TRUE)
+```
+
+ensuring an appropriate Perl version in PATH
+NB java must also be available for MINTplates
+
+```{r perl}
+system('export PATH="/home/rja1e16/perl5/perlbrew/perls/perl-5.28.1/bin:$PATH"')
+```
+
+## libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(future)
+	library(future.apply)
+	library(future.batchtools)
+})
+```
+
+# Fastq input data
+
+```{r}
+meta <- read_tsv(
+	paste0(params$fastqSource,"SraRunTable.txt")
+)
+```
+
+```{r, eval = (params$fetchData == TRUE)}
+#c("SRR5755813", "SRR5755888", "SRR5755963", "SRR5756038", "SRR5756113", "SRR5756188")
+plan(tweak(multiprocess,workers = 6L))
+
+nil <-
+future_lapply(meta$Run,function(sample){
+	paste0(
+		"module load biobuilds\n",
+		"fastq-dump --gzip ",
+		sample,
+		" --outdir ", normalizePath(params$fastqSource)
+	) %>% 
+		system()
+})
+```
+
+```{r plan}
+eval(parse(text = params$plan))
+```
+
+```{r getFastqs}
+rawFastqs <- list.files(
+	params$fastqSource,
+	full.names = TRUE,
+	pattern = "\\.(?:fq|fastq)(?:\\.gz)?"
+)
+names(rawFastqs) <- gsub(
+	rawFastqs,
+	pattern = ".*\\/(.+)\\.(?:fq|fastq)(?:\\.gz)?", replacement = "\\1"
+)
+```
+
+```{r}
+rawFastqs <- rawFastqs[
+meta %>% 
+	drop_na(age) %>% 
+	pull(Run)
+]
+#rawFastqs <- rawFastqs[meta %>% filter(source_name == "whole blood") %>% pull(Run)]
+```
+
+# Trimming
+
+Performing trimming with [TrimGalore](https://github.com/FelixKrueger/TrimGalore/blob/master/Docs/Trim_Galore_User_Guide.md) [@Krueger2015]
+
+- quality filtering (default PHRED 20)
+- discarding reads over max length
+- discarding reads under min length
+- performing fastQC
+- using Illumina `--small_rna` primers in trimm
+
+NB assumes availability of cutadapt and fastQC in PATH, hence biobuilds module load
+
+```{r trim}
+#plan()
+trimmingReports <- 
+future_sapply(rawFastqs, function(file){
+	system(
+		paste0(
+			"module load biobuilds\n", ####!!!!!
+			params$trimgalorePath, " \\\n",
+			"--output_dir ", normalizePath(params$trimmedOut), " \\\n",
+			"--max_length ", params$max, " \\\n",
+			"--length ", params$min, " \\\n",
+			"--fastqc \\\n",
+			"--small_rna \\\n",
+			file,
+			" 2>&1"
+		), intern = TRUE
+	)
+}, USE.NAMES = TRUE, simplify = FALSE)
+```
+
+## Trimming Reports
+
+NB get number of discarded reads too short/long
+
+```{r,eval=FALSE,include=FALSE,echo=FALSE}
+#lapply(trimmingReports,paste0,collapse = "\n")[[1]] %>% cat()
+```
+
+parse trimming reports
+
+```{r}
+reptsParsed <- 
+lapply(
+	lapply(trimmingReports,paste0,collapse = "\n"),
+	function(rept){
+		rept %>% 
+		enframe() %>% 
+		#mutate(name = names(trimmingReports)) %>%
+		extract(
+			value,
+			into = c(
+				"name","totalReads","readsWithAdapters","readsWritted","bpProcessed",
+				"bpQualityTrimmed","bpTotalWritten",
+				"adapterSeq","adapterType","adapterLen","nTrimmed",
+				"BasesPreceeding","overRemSeq"
+			),
+			regex = paste0(
+				"(?s)",
+				".*",
+				"Input filename: .*\\/(.+)\\.(?:fq|fastq)(?:\\.gz)?\\n+",
+				".*",
+				"Total reads processed:\\s+([\\d,]+)\\n+",
+				"Reads with adapters:\\s+([\\d,]+) \\([\\d\\.]+\\%\\)\\n+",
+				"Reads written \\(passing filters\\):\\s+([\\d,]+) \\([\\d\\.]+\\%\\)\\n+",
+				"Total basepairs processed:\\s+([\\d,]+) bp\\n+",
+				"Quality-trimmed:\\s+([\\d,]+) bp \\([\\d\\.]+\\%\\)\\n+",
+				"Total written \\(filtered\\):\\s+([\\d,]+) bp \\([\\d\\.]+\\%\\)\\n+",
+				".*",
+				"Sequence: (\\w+); Type: ([\\w+\\s']+); Length: (\\d+); Trimmed: (\\d+) times.",
+				".*",
+				"Bases preceding removed adapters:",
+				"((?:\\s+[\\w\\/]+\\:\\s+\\d*\\.?\\d+\\%\\n)+)",
+				"[\\n]+",
+				"Overview of removed sequences\n",
+				"(.*)",
+				"\\s{3}RUN STATISTICS FOR INPUT FILE:.*",
+				">>> Now running FastQC on the data <<<.*",
+				""
+			),
+			perl = TRUE#,
+			#remove = FALSE
+		) %>% 
+		extract(
+			BasesPreceeding,
+			into = c("A","C","G","T","Other"),
+			regex = paste0(
+				"(?s).*A:\\s+(\\d+(?:\\.\\d+)?).*",
+				"C:\\s+(\\d+(?:\\.\\d+)?).*",
+				"G:\\s+(\\d+(?:\\.\\d+)?).*",
+				"T:\\s+(\\d+(?:\\.\\d+)?).*",
+				"none\\/other:\\s+(\\d+(?:\\.\\d+)?).*"
+			),
+			perl = TRUE
+		) %>%
+		nest(overRemSeq) %>%
+		mutate(overRemLines = map(data, ~(
+			enframe(
+				c(
+					str_split(
+						.$overRemSeq,pattern = "\n",simplify = TRUE
+					)
+				)
+			) %>%
+			select(-name) %>%
+			tail(-1) %>%
+			extract(
+				value,
+				into = c("length","count","expect","max.err","error counts"),
+				regex = "(\\d+)\t(\\d+)\t(\\d+(?:\\.\\d+)?)\t(\\d+)\t(\\d+(?:\\s+\\d+)?)"
+			)
+		))) %>%
+		unnest(overRemLines)
+}) %>% 
+	do.call(rbind,.) %>%
+	mutate_at(vars(totalReads:bpTotalWritten),parse_number)
+
+```
+
+```{r}
+reptsParsed %>% write_tsv(path = paste0(params$MmOutDir,"/trimmingReportsTabular.tsv"))
+```
+
+```{r}
+reptsParsed %>% 
+	select(name,totalReads:nTrimmed) %>% 
+	distinct()
+```
+
+## multiQC
+
+```{r}
+system(
+	paste0(
+		"source activate conda-env \n",
+		"multiqc ", params$trimmedOut,
+		" -o ", params$MmOutDir, " --interactive -f \n",
+		"source deactivate"
+	)
+)
+```
+
+[multiqc_report.html](`r paste0(params$MmOutDir,"/multiqc_report.html")`)
+
+## get trimmed files
+
+```{r getTrimmed}
+trimmedFastq <- list.files(
+	params$trimmedOut,
+	full.names = TRUE,
+	pattern = "_trimmed\\.(?:fq|fastq)(?:\\.gz)?"
+)
+names(trimmedFastq) <- gsub(
+	trimmedFastq,
+	pattern = ".*\\/(.+)(?:_trimmed\\.(?:fq|fastq)(?:\\.gz)?)",
+	replacement = "\\1"
+)
+```
+
+```{r}
+if(!identical(names(rawFastqs), names(trimmedFastq))){
+	warning("Raw Names Do Not Match Trimmed Names!")
+}
+```
+
+## QC filtering
+
+```{r}
+problemSamples <- c(
+	"SRR5756185","SRR5756186" # mean qulaity score & per base N issues
+)
+
+trimmedFastq <- trimmedFastq[!(names(trimmedFastq) %in% problemSamples)]
+```
+
+# MINTmap
+
+```{r runMInTmap}
+MMres <- future_sapply(names(trimmedFastq),function(fastq){
+	mmo <- system(
+		paste0(
+			"export PATH=\"/home/rja1e16/perl5/perlbrew/perls/perl-5.28.1/bin:$PATH\"\n",
+			"cd ", normalizePath(params$MmOutDir), " \n",
+			"perl ", normalizePath(params$MINTmapPath), " \\\n",
+			"-j '", normalizePath(params$MINTplatesPath), "' \\\n",
+			"-f ", normalizePath(trimmedFastq[fastq]), " \\\n",#/scratch/rja1e16/RNAseqData/
+			"-p ", paste0(params$MmOutPrefix,"_",fastq), " \\\n",
+			"-l ", normalizePath(params$MmRefBuildDir), "/",params$lookup, " \\\n",
+			"-s ", normalizePath(params$MmRefBuildDir), "/",params$tRNAspace, " \\",
+			"-o ", normalizePath(params$MmRefBuildDir), "/",params$anno, " 2>&1"
+		),intern = TRUE
+	)
+	system(paste0("cd ",normalizePath(params$pwd)))
+	return(mmo)
+}, USE.NAMES = TRUE, simplify = FALSE)
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>

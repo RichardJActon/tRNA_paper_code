@@ -1,0 +1,532 @@
+---
+title: "05 - GenomicDataCommons Normal Vs. Cancer tissue tRNA gene methylation - Age Modeling"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+editor_options: 
+  chunk_output_type: inline
+bibliography: "`r normalizePath('../library.bib')`"
+---
+
+# Set-up
+
+```{r}
+if(!dir.exists("out")) {
+	dir.create("out", showWarnings = FALSE, recursive = TRUE)
+}
+```
+
+## libs
+
+```{r}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(lubridate)
+	library(broom)
+	library(psych)
+	library(heatmaply)
+	library(patchwork)
+	library(ComplexHeatmap)
+})
+```
+
+```{r}
+nest <- nest_legacy
+unnest <- unnest_legacy
+```
+
+## Data Read-In
+
+### tRNA array probes
+
+```{r}
+tRNAprobes <- 
+read_delim(	
+	delim = "\t",
+	file = "../tRNA-GtRNAdb/450k_coresponding_hg19tRNAs.bed",
+	col_types = "ciicciiciciicccc",
+	col_names = c("pChr","pStart","pEnd","probeID",
+		as.character(
+			read_delim(
+				delim = "\t",
+				file = "../tRNA-GtRNAdb/std_tRNA_header.txt",
+				col_names = FALSE,
+				col_types = paste0(rep("c", 12), collapse = "")
+			)
+		)
+	)
+)
+
+```
+
+### tRNAge gene set
+
+```{r}
+tRNAge <- read_delim(
+	delim = "\t",
+	 col_names = "tRNAname",
+	 col_types = "c",
+	 file = "../tRNA-GtRNAdb/GenWideSigWintRNAs.txt"
+) %>%
+	pull()
+
+tRNAgeBB <- read_delim(
+	delim = "\t",
+	 col_names = "tRNAname",
+	 col_types = "c",
+	 file = "../tRNA-GtRNAdb/BB_GWS_tRNA.txt"
+) %>%
+	pull()
+```
+
+```{r}
+swsBB23 <- read_tsv(
+	"../tRNA-GtRNAdb/swsBB23.tsv",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+
+gwsBB6 <- read_tsv(
+	"../tRNA-GtRNAdb/BB_GWS_tRNA.txt",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+
+bltRNAs <- read_tsv(
+	"../tRNA-GtRNAdb/tRNAs-in-hg19-blacklist-v2.txt",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+
+swsBB23bl <- swsBB23[!swsBB23 %in% bltRNAs]
+gwsBB6bl <- gwsBB6[!gwsBB6 %in% bltRNAs]
+```
+
+### Methylation Data
+
+```{r}
+dataTest <- readRDS(
+	file = "data/tRNAprobesNormCancerArrayPairs.Rds"
+)
+```
+
+```{r}
+tRNAmethCancerNormal <- dataTest %>% 
+	unnest() %>% 
+	as_tibble() %>%
+	filter(sample_type %in% c("Solid Tissue Normal", "Primary Tumor")) %>%
+	mutate(tRNAge = tRNAname %in% swsBB23bl) %>%
+	filter(!is.na(Beta_value))
+
+```
+
+samples used
+
+```{r}
+tRNAmethCancerNormal %>% 
+	distinct(file_id, file_name, sample_id, case_id, sample_type, primary_site, age) %>% 
+	arrange(sample_type, primary_site, age) %>%
+	write_tsv("out/TCGA_samples_used.tsv")
+```
+
+```{r}
+tRNAmethCancerNormal %>% distinct(case_id) %>% nrow()
+```
+
+```{r}
+tRNAsCovered <- 
+tRNAmethCancerNormal %>% distinct(tRNAname)
+tRNAsCovered
+```
+
+```{r}
+tRNAsCovered %>%
+	filter(tRNAname %in% gwsBB6bl)
+
+tRNAsCovered %>%
+	filter(tRNAname %in% swsBB23bl)
+```
+
+# variance
+
+```{r}
+Levene <- 
+onewaytests::homog.test(data = tRNAmethCancerNormal, Beta_value ~ sample_type, method = "Levene")
+
+#Levene %>% str()
+
+Brown_forsythe <- 
+onewaytests::bf.test(data = tRNAmethCancerNormal, Beta_value ~ sample_type)
+
+#Brown_forsythe %>% str()
+```
+
+# By tRNA age modeling
+
+## Normal
+
+```{r}
+normalAgeModelsBytRNA <- tRNAmethCancerNormal %>%
+	dplyr::filter(sample_type == "Solid Tissue Normal") %>%
+	group_by(tRNAname) %>%
+	#group_by(tRNAname,primary_site) %>%
+	nest() %>%
+	mutate(model = purrr::map(data, ~ lm(age ~ Beta_value, data = .)))
+```
+
+```{r}
+#bonfer <- 0.05 / tRNAmethCancerNormal %>% dplyr::select(probeID) %>% distinct() %>% nrow()
+bonfer <- 0.05 / normalAgeModelsBytRNA %>% nrow()
+bonfer
+```
+
+```{r}
+normalAgeModelsBytRNAG <- normalAgeModelsBytRNA %>%
+	unnest(model %>% purrr::map(glance)) %>% 
+	arrange(p.value)
+normalAgeModelsBytRNAG %>%
+	dplyr::select(-data,-model)
+```
+
+```{r}
+normalAgeModelsBytRNAGsig <- normalAgeModelsBytRNAG %>%
+	dplyr::select(-data, -model) %>%
+	dplyr::filter(p.value < bonfer) %>% 
+	arrange(p.value)
+
+normalAgeModelsBytRNAGsig
+```
+
+```{r}
+normalAgeModelsBytRNA %>%
+    unnest(model %>% purrr::map(tidy)) %>% 
+	filter(term == "Beta_value", p.value < bonfer)
+```
+
+```{r}
+normalAgeModelsBytRNAGsig %>% distinct(tRNAname)
+```
+
+```{r}
+normalAgeModelsBytRNAGsig %>% 
+	dplyr::filter(tRNAname %in% gwsBB6bl)
+
+normalAgeModelsBytRNAGsig %>% 
+	dplyr::filter(tRNAname %in% swsBB23bl)
+```
+
+```{r}
+# plots <- 
+# tRNAmethCancerNormal %>%
+# 	group_by(aa) %>%
+# 	do(plot=
+# 		ggplot(aes())
+# 	)
+```
+
+### Clustering
+
+```{r}
+normalAgeModelsBytRNAG %>% select(-data, -model)
+```
+
+## Cancer
+
+```{r}
+cancerAgeModelsBytRNA <- tRNAmethCancerNormal %>%
+	dplyr::filter(sample_type == "Primary Tumor") %>%
+	group_by(tRNAname) %>%
+	#group_by(tRNAname,primary_site) %>%
+	nest() %>%
+	mutate(model = purrr::map(data, ~ lm(age ~ Beta_value, data = .)))
+```
+
+```{r}
+cancerAgeModelsBytRNAG <- cancerAgeModelsBytRNA %>%
+	unnest(model %>% purrr::map(glance)) %>% 
+	arrange(p.value)
+cancerAgeModelsBytRNAG %>%
+	dplyr::select(-data, -model)
+```
+
+```{r}
+cancerAgeModelsBytRNAGsig <- cancerAgeModelsBytRNAG %>%
+	dplyr::select(-data, -model) %>%
+	dplyr::filter(p.value < bonfer) %>% 
+	arrange(p.value)
+cancerAgeModelsBytRNAGsig
+```
+
+```{r}
+cancerAgeModelsBytRNAGsig %>% distinct(tRNAname)
+```
+
+
+```{r}
+cancerAgeModelsBytRNAGsig %>% 
+	dplyr::filter(tRNAname %in% swsBB23bl)
+```
+
+# By tRNA and Tissue Age modeling
+
+```{r,fig.width=6,fig.height=8}
+tRNAmethCancerNormal %>%
+	dplyr::filter(sample_type == "Solid Tissue Normal") %>%
+	group_by(tRNAname, primary_site) %>%
+	summarise(n = n()) %>%
+	spread(primary_site, n) %>%
+	column_to_rownames("tRNAname") %>%
+	data.matrix() %>% 
+	#heatmaply()
+	Heatmap(
+		row_names_gp = gpar(fontsize = 8),
+		na_col = "black",
+		heatmap_width = unit(5.5, "inches"),
+		heatmap_height = unit(7.5, "inches")#,
+	)
+```
+
+```{r}
+ggplotly(dynamicTicks = TRUE,
+tRNAmethCancerNormal %>%
+	dplyr::filter(sample_type == "Solid Tissue Normal") %>%
+	group_by(tRNAname, primary_site) %>%
+	summarise(n = n()) %>%
+	ggplot(aes(n)) + 
+		geom_density(aes(colour = primary_site))
+)
+```
+
+
+```{r}
+normalAgeModelsBytRNABySite <- tRNAmethCancerNormal %>%
+	dplyr::filter(sample_type == "Solid Tissue Normal") %>%
+	group_by(tRNAname, primary_site) %>%
+	nest() %>%
+	mutate(model = purrr::map(data, ~ lm(age ~ Beta_value, data = .)))
+```
+
+```{r}
+normalAgeModelsBytRNABySiteG <- normalAgeModelsBytRNABySite %>%
+	unnest(model %>% purrr::map(glance)) %>% 
+	arrange(p.value)
+#normalAgeModelsBytRNABySiteG
+```
+
+```{r}
+bonfertRNATissue <- 0.05 / normalAgeModelsBytRNABySiteG %>% nrow()
+bonfertRNATissue
+```
+
+
+```{r}
+normalAgeModelsBytRNABySiteGsig <- normalAgeModelsBytRNABySiteG %>%
+	dplyr::filter(p.value < bonfertRNATissue) %>%
+	dplyr::select(-data, -model)
+normalAgeModelsBytRNABySiteGsig
+```
+
+```{r}
+normalAgeModelsBytRNABySiteGsig %>% 
+	dplyr::filter(tRNAname %in% swsBB23bl)
+```
+
+```{r}
+normalAgeModelsBytRNABySiteG %>% 
+	dplyr::select(-data, -model) %>%
+	dplyr::filter(tRNAname %in% swsBB23bl) %>%
+	dplyr::filter(p.value < bonfer) ###!!! not correcting for all tests - use bonfertRNATissue
+```
+
+### Clustering
+
+```{r,fig.height=8,fig.width=7}
+pvalueByTissueAndtRNA <- 
+normalAgeModelsBytRNABySiteG %>%
+	ungroup() %>%
+	dplyr::select(-data, -model) %>%
+	select(tRNAname, p.value, primary_site) %>%
+	spread(primary_site, p.value)
+	#tRNAname,primary_site,p.value
+	#spread(tRNAname,p.value)
+
+lowCoverageTissues <- 
+normalAgeModelsBytRNABySiteG %>%
+	ungroup() %>%
+	dplyr::select(-data, -model) %>%
+	select(tRNAname, p.value, primary_site) %>%
+	group_by(primary_site) %>%
+	summarise(Nna = length(which(is.na(p.value) | is.nan(p.value))), n = n(), p = Nna / n) %>%
+	filter(p > 0.8) %>%
+	mutate(primary_site = as.character(primary_site)) %>%
+	pull(primary_site)
+
+pvalueByTissueAndtRNAm <- 
+pvalueByTissueAndtRNA %>%
+	select(-tRNAname) %>%
+	select(-lowCoverageTissues) %>%
+	data.matrix()
+	
+rownames(pvalueByTissueAndtRNAm) <- pvalueByTissueAndtRNA$tRNAname
+
+pvalueByTissueAndtRNAm %>% dim()
+pvalueByTissueAndtRNAm %>% heatmaply::heatmaply(
+	main = "Change in DNAm with Age by tissue (p-value)"
+)
+
+pvalueByTissueAndtRNAm %>%
+Heatmap(
+	na_col = "black",
+	heatmap_width = unit(5.5, "inches"),
+	heatmap_height = unit(7.5, "inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Change in DNAm with Age\nby tissue (p-value)",
+	name = "p-value\n",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB, "red", "black")
+	),
+	row_title = "tRNA gene"
+)
+
+#pvalueByTissueAndtRNAm %>%
+
+tmp <- apply(data.matrix(pvalueByTissueAndtRNAm < 0.05), 2, as.character)
+rownames(tmp) <- rownames(pvalueByTissueAndtRNAm)
+tmp %>%
+Heatmap(
+	col = structure(c("red", "blue"), names = c("TRUE", "FALSE")),
+	na_col = "black",
+	heatmap_width = unit(5.5, "inches"),
+	heatmap_height = unit(7.5, "inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Change in DNAm with Age\nby tissue (p-value)",
+	name = "p-value\n",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_split = rownames(.) %>%
+		gsub(pattern = "tRNA-(\\w+)-\\w+-\\w+-\\d+", replacement = "\\1"),
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB, "red", "black")
+	),
+	row_title = "tRNA gene"
+)
+```
+
+```{r,fig.width=7,fig.height=8}
+normalAgeModelsBytRNABySiteGl <- 
+normalAgeModelsBytRNABySiteG %>% 
+	select(-data) %>% 
+	unnest(model %>% map(broom::tidy)) %>% 
+	select(-std.error, -statistic1, -p.value1) %>% 
+	spread(term,estimate)
+
+slopeByTissueAndtRNA <- 
+normalAgeModelsBytRNABySiteGl %>%
+	ungroup() %>%
+	#dplyr::select(-data,-model) %>%
+	select(tRNAname, Beta_value, primary_site) %>%
+	#mutate(Beta_value = log(Beta_value)) %>%
+	spread(primary_site, Beta_value)
+	#tRNAname,primary_site,p.value
+	#spread(tRNAname,p.value)
+
+lowCoverageTissues <- 
+normalAgeModelsBytRNABySiteGl %>%
+	ungroup() %>%
+	#dplyr::select(-data,-model) %>%
+	select(tRNAname, Beta_value, primary_site) %>%
+	group_by(primary_site) %>%
+	summarise(Nna = length(which(is.na(Beta_value) | is.nan(Beta_value))), n = n(), p = Nna / n) %>%
+	filter(p > 0.5) %>%
+	mutate(primary_site = as.character(primary_site)) %>%
+	pull(primary_site)
+
+slopeByTissueAndtRNAm <- 
+slopeByTissueAndtRNA %>%
+	select(-tRNAname) %>%
+	select(-lowCoverageTissues) %>%
+	data.matrix()
+	
+rownames(slopeByTissueAndtRNAm) <- slopeByTissueAndtRNA$tRNAname
+
+slopeByTissueAndtRNAm %>% dim()
+slopeByTissueAndtRNAm %>% heatmaply::heatmaply(
+	main = "Change in DNAm with Age by tissue (slope)"
+)
+
+slopeByTissueAndtRNAmHeatMap <- 
+slopeByTissueAndtRNAm %>%
+Heatmap(
+	na_col = "black",
+	heatmap_width = unit(5.5, "inches"),
+	heatmap_height = unit(7.5, "inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Change in DNAm with Age\nby tissue (slope)",
+	name = "slope\n",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB, "red", "black")
+	),
+	row_title = "tRNA gene"
+)
+
+png(
+	filename = "graphics/slopeByTissueAndtRNAmHeatMap_bl.png",
+	width = 7, height = 8, units = "in", res = 192
+)
+slopeByTissueAndtRNAmHeatMap
+dev.off()
+
+slopeByTissueAndtRNAmHeatMap
+
+slopeByTissueAndtRNAmAAsplitHeatMap <- 
+slopeByTissueAndtRNAm %>%
+Heatmap(
+	na_col = "black",
+	heatmap_width = unit(5.5, "inches"),
+	heatmap_height = unit(7.5, "inches"),
+	column_title_gp = gpar(fontsize = 16, fontface = "bold"),
+	column_title = "Change in DNAm with Age\nby tissue (slope)",
+	name = "slope\n",
+	column_names_rot = 45,
+	column_names_gp = gpar(fontsize = 10),
+	row_split = rownames(.) %>%
+		gsub(pattern = "tRNA-(\\w+)-\\w+-\\w+-\\d+", replacement = "\\1"),
+	row_names_gp = gpar(
+		fontsize = 10,
+		col = if_else(rownames(.) %in% tRNAgeBB, "red", "black")
+	),
+	row_title = "tRNA gene"
+)
+
+png(
+	filename = "graphics/slopeByTissueAndtRNAmAAsplitHeatMap_bl.png",
+	width = 7, height = 8, units = "in", res = 192
+)
+slopeByTissueAndtRNAmAAsplitHeatMap
+dev.off()
+
+slopeByTissueAndtRNAmAAsplitHeatMap
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
+# References

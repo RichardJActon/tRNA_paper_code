@@ -1,0 +1,449 @@
+---
+title: "tRNA only age models - Model Results Exploration"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+    keep_md: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+#runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+---
+
+# Introduction
+
+# Set-up
+
+## Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+	library(tidyverse)
+	library(magrittr)
+})
+```
+
+```{r}
+if(!dir.exists("out")) {
+	dir.create("out", showWarnings = FALSE, recursive = TRUE)
+}
+```
+
+
+# Data Read-in
+
+```{r}
+gws <- 4.338717e-09
+```
+
+```{r}
+sws <- 0.05 / 598 # nrow(tRNAwinLookup)
+sws
+```
+
+```{r}
+gwsBB6 <- 
+read_tsv(
+	"../tRNA-GtRNAdb/BB_GWS_tRNA.txt",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+```
+
+```{r}
+swsBB23 <- 
+read_tsv(
+	"../tRNA-GtRNAdb/swsBB23.tsv",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+```
+
+```{r}
+bltRNAs <- 
+read_tsv(
+	"../tRNA-GtRNAdb/tRNAs-in-hg19-blacklist-v2.txt",
+	col_names = "tRNAname", col_types = "c"
+) %>% pull()
+```
+
+```{r}
+gwsBB6bl <- gwsBB6[!gwsBB6 %in% bltRNAs]
+swsBB23 <- swsBB23[!swsBB23 %in% bltRNAs]
+```
+
+```{r}
+modelsResults <-
+read_tsv(
+	"out/combinedModelSummaries.tsv",
+	col_types = cols(
+		norm = col_logical(),
+		dropMissing = col_logical(),
+		form = col_character(),
+		outDir = col_character(),
+		filterFunc = col_character(),
+		prefix = col_character(),
+		wChr = col_character(),
+		wStart = col_double(),
+		wEnd = col_double(),
+		tRNAname = col_character(),
+		variable = col_character(),
+		estimate = col_double(),
+		stderr = col_double(),
+		t_value = col_double(),
+		p_value = col_double()
+	)
+) %>% mutate(dir = sign(estimate))
+
+# modelsResults %>% distinct(form)
+
+modelsResults <- 
+modelsResults %>%
+	mutate(
+		form = case_when(
+			form == "ageDNAextraction ~ methQNorm + Batch" ~ "Batch",
+			form == "ageDNAextraction ~ methQNorm" ~ "uncorrected",
+			form == "ageDNAextraction ~ methQNorm + eosinophils + lymphocytes + monocytes + neutrophils" ~ "Blood",
+			form == "ageDNAextraction ~ methQNorm + eosinophils + lymphocytes + monocytes + neutrophils + Batch" ~ "Blood & Batch"
+		)
+	) %>%
+	mutate(norm = ifelse(norm, "norm", "")) %>%
+	mutate(dropMissing = ifelse(dropMissing, "dropMissing", "")) %>%
+	unite(col = model, prefix, form, norm, dropMissing) %>%
+	select(-filterFunc, -outDir)
+
+modelsResults %>%
+	distinct(model,res)
+```
+
+# blacklist pre-filter
+
+```{r}
+modelsResults <- 
+	modelsResults %>% filter(!tRNAname %in% bltRNAs)
+```
+
+# Fxn
+
+```{r}
+nSigtRNAbyModel <- function(df,sig){
+	df %>%
+		group_by(model) %>%
+		filter(p_value < sig) %>%
+		summarise(res = res[1], n = length(unique(tRNAname)))
+}
+```
+
+```{r}
+sigtRNAbyModel <- function(df,sig) {
+	df %>%
+		group_by(model) %>%
+		filter(p_value < sig) %>%
+		nest() %>%
+		mutate(tRNAs = map(data, ~distinct(.,tRNAname))) %>%
+		unnest(tRNAs)
+}
+```
+
+```{r}
+nSigtRNAbyModelDir <- function(df,sig){
+	df %>%
+		group_by(model,dir) %>%
+		filter(p_value < sig) %>%
+		summarise(res = res[1], n = length(unique(tRNAname))) %>%
+		pivot_wider(names_from = dir,values_from = n)
+}
+```
+
+# Results
+
+```{r}
+nSigtRNAbyModel(modelsResults, 0.05)
+nSigtRNAbyModelDir(modelsResults, 0.05)
+#sigtRNAbyModel(modelsResults,0.05) %>% mutate()
+```
+
+```{r}
+nSigtRNAbyModel(modelsResults, sws)
+nSigtRNAbyModelDir(modelsResults, sws)
+#sigtRNAbyModel(modelsResults,sws) %>% unnest()
+```
+
+```{r}
+nSigtRNAbyModel(modelsResults, gws)
+nSigtRNAbyModelDir(modelsResults, gws)
+```
+
+# SWS for B & B uncorrected all samples model
+
+```{r}
+modelsResults %>%
+	filter(model == "NA_Blood & Batch_norm_dropMissing") %>%
+	filter(p_value < sws) #%>% distinct(tRNAname)
+
+swsBB23 <- 
+modelsResults %>%
+	filter(model == "NA_Blood & Batch_norm_dropMissing") %>%
+	filter(p_value < sws) %>% 
+	distinct(tRNAname)
+
+#write_tsv(swsBB23, "../../tRNA-GtRNAdb/swsBB23.tsv", col_names = FALSE)
+
+swsBB23 <- swsBB23 %>% pull()
+swsBB23
+```
+
+```{r}
+modelsResults %>%
+	filter(model == "NA_Batch_norm_dropMissing") %>%
+	filter(p_value < sws) #%>% distinct(tRNAname)
+
+modelsResults %>%
+	filter(model == "NA_Batch_norm_dropMissing") %>%
+	filter(p_value < sws) %>%
+	group_by(dir) %>%
+	count()
+```
+
+## longitudinal
+
+```{r}
+modelsResults %>%
+	filter(model == "longitudinals_NA_norm_dropMissing") %>%
+	distinct(tRNAname) %>%
+	nrow()
+```
+
+```{r}
+longSig <- 
+modelsResults %>%
+	filter(model == "longitudinals_NA_norm_dropMissing") %>%
+	filter(p_value < 0.05) %>% 
+	arrange(p_value) %>%
+	filter(dir == 1) %>%
+	mutate(rank = row_number()) 
+
+longSig
+
+longSig %>%
+	distinct(tRNAname) %>%
+	nrow()
+```
+
+```{r}
+longSigHypo <- 
+modelsResults %>%
+	filter(model == "longitudinals_NA_norm_dropMissing") %>%
+	filter(p_value < 0.05) %>% 
+	arrange(p_value) %>%
+	filter(dir == -1) %>%
+	mutate(rank = row_number()) 
+
+longSigHypo
+
+longSigHypo %>%
+	distinct(tRNAname) %>%
+	nrow()
+```
+
+```{r}
+longSigInswsBBhyper <- 
+modelsResults %>%
+	filter(model == "longitudinals_NA_norm_dropMissing") %>%
+	filter(p_value < 0.05) %>% 
+	arrange(p_value) %>%
+	filter(dir == 1) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname %in% swsBB23) #%>%
+
+longSigInswsBBhyper
+
+longSigInswsBBhyper %>%
+	distinct(tRNAname) %>%
+	nrow()
+```
+
+```{r}
+longSigInswsBBhypo <- 
+modelsResults %>%
+	filter(model == "longitudinals_NA_norm_dropMissing") %>%
+	filter(p_value < 0.05) %>% 
+	arrange(p_value) %>%
+	filter(dir == -1) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname %in% swsBB23) #%>%
+
+longSigInswsBBhypo
+
+longSigInswsBBhypo %>%
+	distinct(tRNAname) %>%
+	nrow()
+```
+
+```{r}
+longSigIngwsBB <- 
+modelsResults %>%
+	filter(model == "longitudinals_NA_norm_dropMissing") %>%
+	filter(p_value < 0.05) %>% 
+	arrange(p_value) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname %in% gwsBB6)
+
+longSigIngwsBB %>%
+	distinct(tRNAname) %>%
+	nrow()
+
+```
+
+## unrelated
+
+```{r}
+un1sws <- 
+modelsResults %>%
+	filter(model == "unrelated1_Blood & Batch_norm_dropMissing") %>%
+	filter(p_value < sws) 
+un1sws
+
+un2sws <- 
+modelsResults %>%
+	filter(model == "unrelated2_Blood & Batch_norm_dropMissing") %>%
+	filter(p_value < sws) 
+un2sws
+```
+
+```{r}
+un1sws %>% distinct(tRNAname)
+un2sws %>% distinct(tRNAname)
+```
+
+```{r}
+un1sws %>% filter(tRNAname %in% gwsBB6) %>% distinct(tRNAname)
+un2sws %>% filter(tRNAname %in% gwsBB6) %>% distinct(tRNAname)
+```
+```{r}
+un1sws %>% filter(tRNAname %in% swsBB23) %>% distinct(tRNAname)
+un2sws %>% filter(tRNAname %in% swsBB23) %>% distinct(tRNAname)
+```
+
+# MZ
+
+```{r}
+modelsResults %>%
+	filter(model == "MZ1_Blood & Batch_norm_dropMissing") %>%
+	filter(p_value < 0.05) #%>% distinct(tRNAname)
+
+modelsResults %>%
+	filter(model == "MZ2_Blood & Batch_norm_dropMissing") %>%
+	filter(p_value < 0.05) #%>% distinct(tRNAname)
+
+```
+
+```{r}
+modelsResults %>%
+	filter(model == "MZ1_Blood & Batch_norm_dropMissing") %>% 
+	arrange(p_value) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname == "tRNA-iMet-CAT-1-4")
+modelsResults %>%
+	filter(model == "MZ2_Blood & Batch_norm_dropMissing") %>% 
+	arrange(p_value) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname == "tRNA-iMet-CAT-1-4")
+modelsResults %>%
+	filter(model == "DZ1_Blood & Batch_norm_dropMissing") %>% 
+	arrange(p_value) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname == "tRNA-iMet-CAT-1-4")
+modelsResults %>%
+	filter(model == "DZ2_Blood & Batch_norm_dropMissing") %>% 
+	arrange(p_value) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname == "tRNA-iMet-CAT-1-4")
+```
+
+```{r}
+modelsResults %>%
+	filter(model == "MZ1_Blood & Batch_norm_dropMissing") %>% 
+	arrange(p_value) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname %in% gwsBB6)
+modelsResults %>%
+	filter(model == "MZ2_Blood & Batch_norm_dropMissing") %>% 
+	arrange(p_value) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname %in% gwsBB6)
+modelsResults %>%
+	filter(model == "DZ1_Blood & Batch_norm_dropMissing") %>% 
+	arrange(p_value) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname %in% gwsBB6)
+modelsResults %>%
+	filter(model == "DZ2_Blood & Batch_norm_dropMissing") %>% 
+	arrange(p_value) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname %in% gwsBB6)
+```
+
+```{r}
+getSigtRNAs <- function(mod) {
+modelsResults %>%
+	filter(model == mod) %>% 
+	filter(p_value < 0.05) %>%
+	mutate(rank = row_number()) %>% 
+	filter(tRNAname %in% gwsBB6) %>%
+	group_by(tRNAname) %>%
+	summarise(
+		model = model[1],
+		res = res[1],
+		p_value = min(p_value),
+		rank = min(rank)
+	) %>%
+	arrange(rank)
+		#distinct(tRNAname)
+}
+
+gwsBB6TwinCompares <-
+bind_rows(
+	lapply(
+		c(
+			"MZ1_Blood & Batch_norm_dropMissing", 
+			"MZ2_Blood & Batch_norm_dropMissing",
+			"DZ1_Blood & Batch_norm_dropMissing", 
+			"DZ2_Blood & Batch_norm_dropMissing"
+		),
+		getSigtRNAs
+	)
+)
+gwsBB6TwinCompares
+
+write_tsv(gwsBB6TwinCompares,path = "out/gwsBB6TwinComparesNomSig.tsv")
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>

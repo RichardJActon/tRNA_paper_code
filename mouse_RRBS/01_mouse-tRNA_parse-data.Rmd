@@ -1,0 +1,197 @@
+---
+title: "01_mouse-tRNA_parse-data"
+author: "Richard J. Acton"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    df_print: paged
+    keep_md: yes
+  html_notebook:
+    fig_caption: yes
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    fig_caption: yes
+    df_print: kable
+bibliography: "`r normalizePath(params$bib)`"
+csl: "`r normalizePath(params$csl)`"
+link-citations: yes
+linkcolor: blue
+#runtime: shiny
+editor_options: 
+  chunk_output_type: inline
+params:
+  bib: "../library.bib"
+  csl: "../genomebiology.csl"
+---
+
+# Introduction
+
+Using mouse RRBS sequencing data from [@Petkovich2017] [GSE80672](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE80672) and mouse tRNA data from GtRNAdb [@Chan2009] to examine changes in tRNA gene DNAm with Age.
+
+# Set-up
+
+## Libs
+
+```{r libs}
+suppressPackageStartupMessages({
+    library(tidyverse)
+    library(here)
+    library(plyranges)
+    library(BSgenome.Mmusculus.UCSC.mm10)
+    library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+})
+```
+
+# Functions
+
+```{r}
+readGEO <- function(filename) {
+    filename %>%
+    read_tsv(
+        col_names = c("index", "meth", "cov"),
+        col_types = "cdi", skip = 1L
+    )
+}
+```
+
+```{r}
+parseGEO <- function(df) {
+    df %>%
+    tidyr::separate(
+        index, into = c("pre", "gi", "ref", "RefSeqAccn", "pos"), sep = "\\|"
+    ) %>%
+    mutate(pos = as.numeric(gsub(":", "", pos))) %>%
+    dplyr::select(
+        RefSeqAccn, pos, meth, cov
+    )
+}
+```
+
+```{r}
+chrLookup <- function(df,tab) {
+    left_join(
+        df,
+        tab,
+        by = "RefSeqAccn"
+    )
+}
+```
+
+```{r}
+geo2Granges <- function(df) {
+    df %>%
+    mutate(width = 1L, strand = "*") %>%
+    dplyr::select(seqnames = chr, start = pos, width, meth, cov) %>%
+    plyranges::as_granges()
+}
+```
+
+```{r}
+subsetGEO <- function(geo, set) {
+    plyranges::filter_by_overlaps(geo, set)
+}
+```
+
+```{r}
+processGEO <- function(filename, chrtab, set) {
+	print(filename)
+
+	readGEO(filename) %>%
+	parseGEO() %>%
+	chrLookup(chrtab) %>%
+	geo2Granges() %>%
+	subsetGEO(set)
+}
+```
+
+# Data Read-in
+
+## Download manifest
+
+```{r}
+samples <- read_tsv(
+    "data/downloaded_samples_manifest.tsv"
+)
+```
+
+```{r}
+assemblyTable <- read_tsv(
+    "data/GCF_000001635.26_GRCm38.p6_assembly_report.txt",
+    skip = 42
+)
+
+chrLookupTable <- 
+    assemblyTable %>% 
+    dplyr::select(RefSeqAccn = `RefSeq-Accn`, chr = `UCSC-style-name`)
+```
+
+## tRNAs
+
+```{r}
+mousetRNAs <- rtracklayer::import.bed("data/mm10-tRNAs.bed", genome = "mm10")
+mousetRNAs
+```
+
+# Body
+
+```{r}
+# # readGEO(testfile)
+# testGr <- 
+#     processGEO(testfile, chrLookupTable, mousetRNAs)
+```
+
+```{r fig.width = 4, fig.height = 3}
+if(!dir.exists("graphics")) {
+	dir.create("graphics", showWarnings = FALSE, recursive = TRUE)
+}
+
+ageDistPlot <- 
+	samples %>% 
+	ggplot(aes(`age (years)`)) + 
+		geom_density() + 
+		labs(x = "Age /months")
+ggsave(
+	ageDistPlot,
+	file = "graphics/ageDistPlot.png",
+	width = 4,
+	height = 3
+)
+
+ageDistPlot 
+```
+
+```{r}
+methData <- samples %>%
+	filter(geo_accession != "GSM2132925") %>%
+	mutate(local_files = paste0("./data/geo/", local_files)) %>%
+	dplyr::mutate(
+		data = map(
+			local_files,
+			~processGEO(.x, chrtab = chrLookupTable, set = mousetRNAs)
+		)
+	)
+```
+
+sample 138 ./data/geo/GSM2132925_M2806.overlap.txt.gz - appears to be missing its file on GEO
+
+```{r}
+saveRDS(methData, "data/tRNAmethdata.Rds")
+```
+
+# Session Info
+
+```{r sessionInfo}
+sessionInfo()
+```
+
+# References
+
+<div id = "refs"></div>
+

@@ -1,0 +1,174 @@
+title	geo_accession	status	submission_date	last_update_date	type	channel_count	source_name_ch1	organism_ch1	tissue	strain	age (years)	gender	genetic condition	diet
+20D02	GSM2132712	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard
+20D03	GSM2132713	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard
+20D04	GSM2132714	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard
+20D05	GSM2132715	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard
+20D06	GSM2132716	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard
+20D07	GSM2132717	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	0.67	Male	Wild Type	standard
+35D01	GSM2132718	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard
+35D02	GSM2132719	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard
+35D04	GSM2132720	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard
+35D05	GSM2132721	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard
+35D06	GSM2132722	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard
+35D07	GSM2132723	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	1.17	Male	Wild Type	standard
+B6_CR1001	GSM2132724	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	Calorie Restricted
+B6_CR1002	GSM2132725	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	Calorie Restricted
+B6_CR1003	GSM2132726	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	Calorie Restricted
+B6_CR1004	GSM2132727	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	Calorie Restricted
+B6_CR1005	GSM2132728	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	Calorie Restricted
+B6_CR1801	GSM2132729	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	18	Male	Wild Type	Calorie Restricted
+B6_CR1802	GSM2132730	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	18	Male	Wild Type	Calorie Restricted
+B6_CR1803	GSM2132731	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	18	Male	Wild Type	Calorie Restricted
+B6_CR1804	GSM2132732	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	18	Male	Wild Type	Calorie Restricted
+B6_CR1805	GSM2132733	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	18	Male	Wild Type	Calorie Restricted
+B6_CR2301	GSM2132734	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	23	Male	Wild Type	Calorie Restricted
+B6_CR2302	GSM2132735	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	23	Male	Wild Type	Calorie Restricted
+B6_CR2303	GSM2132736	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	23	Male	Wild Type	Calorie Restricted
+B6_CR2304	GSM2132737	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	23	Male	Wild Type	Calorie Restricted
+B6_CR2305	GSM2132738	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	23	Male	Wild Type	Calorie Restricted
+B6_CR2701	GSM2132739	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	27	Male	Wild Type	Calorie Restricted
+B6_CR2702	GSM2132740	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	27	Male	Wild Type	Calorie Restricted
+B6_CR2703	GSM2132741	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	27	Male	Wild Type	Calorie Restricted
+B6_CR2704	GSM2132742	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	27	Male	Wild Type	Calorie Restricted
+B6_CR2705	GSM2132743	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	27	Male	Wild Type	Calorie Restricted
+M0301	GSM2132820	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard
+M0302	GSM2132821	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard
+M0303	GSM2132822	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard
+M0304	GSM2132823	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard
+M0305	GSM2132824	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard
+M0306	GSM2132825	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard
+M0308	GSM2132826	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard
+M0309	GSM2132827	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard
+M0310	GSM2132828	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	3	Male	Wild Type	standard
+M0401	GSM2132829	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard
+M0402	GSM2132830	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard
+M0403	GSM2132831	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard
+M0404	GSM2132832	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard
+M0405	GSM2132833	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard
+M0406	GSM2132834	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard
+M0407	GSM2132835	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard
+M0409	GSM2132836	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard
+M0410	GSM2132837	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	4	Male	Wild Type	standard
+M0601	GSM2132838	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard
+M0603	GSM2132839	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard
+M0604	GSM2132840	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard
+M0605	GSM2132841	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard
+M0606	GSM2132842	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard
+M0607	GSM2132843	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard
+M0608	GSM2132844	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard
+M0609	GSM2132845	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard
+M0610	GSM2132846	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	6	Male	Wild Type	standard
+M0801	GSM2132847	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard
+M0802	GSM2132848	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard
+M0803	GSM2132849	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard
+M0804	GSM2132850	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard
+M0805	GSM2132851	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard
+M0806	GSM2132852	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard
+M0807	GSM2132853	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard
+M0808	GSM2132854	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard
+M0810	GSM2132855	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	8	Male	Wild Type	standard
+M10_7501	GSM2132856	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard
+M10_7502	GSM2132857	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard
+M10_7504	GSM2132858	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard
+M10_7505	GSM2132859	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard
+M10_7506	GSM2132860	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard
+M10_7507	GSM2132861	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard
+M10_7508	GSM2132862	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard
+M10_7509	GSM2132863	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard
+M10_7510	GSM2132864	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	10	Male	Wild Type	standard
+M1201	GSM2132865	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard
+M1202	GSM2132866	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard
+M1203	GSM2132867	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard
+M1204	GSM2132868	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard
+M1205	GSM2132869	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard
+M1206	GSM2132870	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard
+M1207	GSM2132871	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard
+M1208	GSM2132872	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard
+M1209	GSM2132873	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard
+M1210	GSM2132874	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	12	Male	Wild Type	standard
+M1601	GSM2132875	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard
+M1602	GSM2132876	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard
+M1603	GSM2132877	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard
+M1605	GSM2132878	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard
+M1606	GSM2132879	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard
+M1607	GSM2132880	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard
+M1608	GSM2132881	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard
+M1609	GSM2132882	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard
+M1610	GSM2132883	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	16	Male	Wild Type	standard
+M2001	GSM2132884	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard
+M2003	GSM2132885	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard
+M2004	GSM2132886	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard
+M2005	GSM2132887	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard
+M2006	GSM2132888	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard
+M2007	GSM2132889	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard
+M2008	GSM2132890	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard
+M2009	GSM2132891	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard
+M2010	GSM2132892	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	20	Male	Wild Type	standard
+M2201	GSM2132893	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard
+M2202	GSM2132894	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard
+M2203	GSM2132895	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard
+M2204	GSM2132896	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard
+M2205	GSM2132897	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard
+M2206	GSM2132898	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard
+M2208	GSM2132899	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard
+M2209	GSM2132900	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard
+M2210	GSM2132901	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	22	Male	Wild Type	standard
+M2401	GSM2132902	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard
+M2402	GSM2132903	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard
+M2403	GSM2132904	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard
+M2404	GSM2132905	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard
+M2405	GSM2132906	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard
+M2407	GSM2132907	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard
+M2408	GSM2132908	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard
+M2409	GSM2132909	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard
+M2411	GSM2132910	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	24	Male	Wild Type	standard
+M2601	GSM2132911	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard
+M2602	GSM2132912	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard
+M2603	GSM2132913	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard
+M2604	GSM2132914	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard
+M2605	GSM2132915	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard
+M2606	GSM2132916	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard
+M2607	GSM2132917	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard
+M2608	GSM2132918	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard
+M2609	GSM2132919	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard
+M2610	GSM2132920	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	26	Male	Wild Type	standard
+M2801	GSM2132921	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard
+M2802	GSM2132922	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard
+M2804	GSM2132923	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard
+M2805	GSM2132924	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard
+M2806	GSM2132925	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard
+M2807	GSM2132926	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard
+M2808	GSM2132927	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard
+M2809	GSM2132928	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard
+M2810	GSM2132929	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	28	Male	Wild Type	standard
+M3001	GSM2132930	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard
+M3002	GSM2132931	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard
+M3003	GSM2132932	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard
+M3004	GSM2132933	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard
+M3005	GSM2132934	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard
+M3006	GSM2132935	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard
+M3007	GSM2132936	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard
+M3009	GSM2132937	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard
+M3010	GSM2132938	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	30	Male	Wild Type	standard
+M3204	GSM2132939	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard
+M3205	GSM2132940	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard
+M3206	GSM2132941	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard
+M3207	GSM2132942	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard
+M3208	GSM2132943	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard
+M3209	GSM2132944	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard
+M3210	GSM2132945	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	32	Male	Wild Type	standard
+M3401	GSM2132946	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard
+M3402	GSM2132947	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard
+M3403	GSM2132948	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard
+M3404	GSM2132949	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard
+M3405	GSM2132950	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard
+M3406	GSM2132951	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard
+M3408	GSM2132952	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard
+M3409	GSM2132953	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard
+M3410	GSM2132954	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	34	Male	Wild Type	standard
+M3501	GSM2132955	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard
+M3501R	GSM2132956	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard
+M3502	GSM2132957	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard
+M3502R	GSM2132958	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard
+M3503	GSM2132959	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard
+M3503R	GSM2132960	Public on Apr 05 2017	Apr 26 2016	May 15 2019	SRA	1	Whole Blood	Mus musculus	whole blood	C57BL/6	35	Male	Wild Type	standard
