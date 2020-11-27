@@ -4,7 +4,7 @@
 # Source Code for Analyses in: The Genomic Loci of Specific Human tRNA Genes Exhibit Ageing-Related DNA Hypermethylation
 
 <!-- badges: start -->
-
+[![DOI](https://zenodo.org/badge/232615369.svg)](https://zenodo.org/badge/latestdoi/232615369)
 <!-- badges: end -->
 
 bioRXiv: <https://doi.org/10.1101/870352>
